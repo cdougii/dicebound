@@ -637,8 +637,10 @@ const PRESET_WAVES = [
 
 // HP added per completed wave for each enemy type
 const HP_SCALE = { Rat: 2, Goblin: 3, Orc: 5 };
-// Attack bonus: +1 per every 2 completed waves
-function enemyAtkBonus(wavesCompleted) { return Math.floor(wavesCompleted / 2); }
+// Attack bonus starts after wave 4: +1 per every 2 waves beyond wave 4
+function enemyAtkBonus(wavesCompleted) {
+  return Math.max(0, Math.floor((wavesCompleted - 2) / 2));
+}
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let player, shield, energy, energyPerTurn, dieUpgrades, abilityLevels;
