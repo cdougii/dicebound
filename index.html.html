@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DICEBOUND</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Cinzel:wght@700;900&display=swap');
+
+  :root {
+    --bg: #0d0d0f;
+    --panel: #13131a;
+    --border: #2a2a3a;
+    --accent: #c8a951;
+    --accent2: #7a4fcf;
+    --danger: #c94040;
+    --heal: #4caf7a;
+    --shield-col: #4a8fc9;
+    --text: #d4d0c8;
+    --muted: #6a6880;
+    --mono: 'Share Tech Mono', monospace;
+    --display: 'Cinzel', serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 10px 40px;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(1.8rem, 5vw, 3rem);
+    letter-spacing: 0.3em;
+    color: var(--accent);
+    text-shadow: 0 0 30px rgba(200,169,81,0.4);
+    margin-bottom: 6px;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.75rem;
+    letter-spacing: 0.2em;
+    margin-bottom: 28px;
+    text-transform: uppercase;
+  }
+
+  #game {
+    width: 100%;
+    max-width: 720px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px 20px;
+  }
+
+  .panel-title {
+    font-family: var(--display);
+    font-size: 0.65rem;
+    letter-spacing: 0.25em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+
+  /* HP Bars */
+  .combatants {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .combatant-block { }
+
+  .combatant-name {
+    font-family: var(--display);
+    font-size: 1rem;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+
+  .combatant-name.enemy-name { color: var(--danger); }
+
+  .hp-info {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .hp-bar-track {
+    height: 10px;
+    background: #1c1c28;
+    border-radius: 2px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  .hp-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+
+  .player-fill { background: var(--heal); }
+  .enemy-fill { background: var(--danger); }
+
+  .shield-info { display: none; } /* kept for compat, not used */
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.72rem;
+    margin-top: 5px;
+  }
+
+  .stat-label { color: var(--muted); letter-spacing: 0.05em; }
+  .stat-val { font-family: var(--display); font-size: 0.85rem; }
+  .shield-val-text { color: var(--shield-col); }
+  .shield-stat .stat-label { color: var(--shield-col); }
+
+  /* Assignment Phase */
+  .assign-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .assign-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .die-label {
+    font-family: var(--display);
+    font-size: 1.1rem;
+    color: var(--accent);
+    width: 40px;
+    flex-shrink: 0;
+  }
+
+  .assign-btn {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    background: #1a1a26;
+    color: var(--muted);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.05em;
+  }
+
+  .assign-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .assign-btn.selected {
+    background: var(--accent);
+    color: #0d0d0f;
+    border-color: var(--accent);
+    font-weight: bold;
+  }
+
+  .assign-btn.selected.ability-shield { background: var(--shield-col); border-color: var(--shield-col); }
+  .assign-btn.selected.ability-heal { background: var(--heal); border-color: var(--heal); }
+
+  /* Action dice buttons */
+  .dice-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .die-btn {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    padding: 12px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid var(--border);
+    background: #1a1a26;
+    color: var(--text);
+    line-height: 1.3;
+    text-align: center;
+    min-width: 90px;
+  }
+
+  .die-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  }
+
+  .die-btn:active:not(:disabled) { transform: translateY(0); }
+
+  .die-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .die-btn .die-name { font-size: 1.1rem; color: var(--accent); }
+  .die-btn .die-ability { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+  .die-btn .die-ability.dmg { color: var(--danger); }
+  .die-btn .die-ability.shld { color: var(--shield-col); }
+  .die-btn .die-ability.heal    { color: var(--heal); }
+  .die-btn .die-ability.poison  { color: #a0c060; }
+  .die-btn .die-ability.rage    { color: #e07030; }
+  .die-btn .die-ability.thorns  { color: #b060c0; }
+
+  .die-btn .die-cost { font-size: 0.65rem; color: var(--accent2); margin-top: 4px; letter-spacing: 0.03em; }
+
+  .die-btn.too-costly { border-color: #1e1e2a; background: #111118; }
+  .die-btn.too-costly .die-name { color: var(--muted); }
+  .die-btn.too-costly .die-cost { color: var(--muted); }
+
+  /* Energy display */
+  .energy-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .energy-label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .energy-value {
+    font-family: var(--display);
+    font-size: 1.4rem;
+    color: var(--accent2);
+    text-shadow: 0 0 12px rgba(122,79,207,0.5);
+    min-width: 2ch;
+  }
+
+  .energy-pips {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .pip {
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    background: var(--accent2);
+    opacity: 0.85;
+    transition: opacity 0.2s;
+  }
+
+  .pip.empty { background: #2a2a3a; opacity: 1; }
+
+  /* End turn button */
+  .end-turn-btn {
+    font-family: var(--display);
+    font-size: 0.85rem;
+    letter-spacing: 0.12em;
+    padding: 10px 22px;
+    border: 1px solid var(--muted);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 2px;
+  }
+
+  .end-turn-btn:hover:not(:disabled) {
+    border-color: var(--text);
+    color: var(--text);
+  }
+
+  .end-turn-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .combat-actions {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  /* Combat log */
+  #log {
+    max-height: 200px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .log-entry {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(42,42,58,0.5);
+    color: var(--text);
+  }
+
+  .log-entry.dmg { color: #e08080; }
+  .log-entry.heal-log { color: var(--heal); }
+  .log-entry.shield-log { color: var(--shield-col); }
+  .log-entry.energy-log { color: var(--accent2); }
+  .log-entry.crit        { color: var(--accent); font-weight: bold; letter-spacing: 0.04em; }
+  .log-entry.poison-log  { color: #a0c060; }
+  .log-entry.rage-log    { color: #e07030; }
+  .log-entry.thorns-log  { color: #b060c0; }
+  .log-entry.system { color: var(--accent); font-family: var(--display); font-size: 0.7rem; letter-spacing: 0.1em; }
+  .log-entry.muted { color: var(--muted); }
+
+  /* Big action button */
+  .big-btn {
+    font-family: var(--display);
+    font-size: 1rem;
+    letter-spacing: 0.15em;
+    padding: 14px 32px;
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 6px;
+  }
+
+  .big-btn:hover {
+    background: var(--accent);
+    color: var(--bg);
+    box-shadow: 0 0 20px rgba(200,169,81,0.3);
+  }
+
+  /* Outcome */
+  .outcome {
+    text-align: center;
+    padding: 30px 20px;
+  }
+
+  .outcome-title {
+    font-family: var(--display);
+    font-size: 2.5rem;
+    letter-spacing: 0.2em;
+    margin-bottom: 12px;
+  }
+
+  .outcome-title.win { color: var(--accent); text-shadow: 0 0 30px rgba(200,169,81,0.5); }
+  .outcome-title.lose { color: var(--danger); text-shadow: 0 0 30px rgba(201,64,64,0.5); }
+
+  .enemy-intro {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .enemy-intro span { color: var(--accent); }
+
+  /* scrollbar */
+  #log::-webkit-scrollbar { width: 4px; }
+  #log::-webkit-scrollbar-track { background: transparent; }
+  #log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Wave info bar */
+  .wave-bar {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.08em;
+  }
+  .wave-bar strong { color: var(--accent); font-family: var(--display); font-size: 0.85rem; }
+
+  /* Reward screen */
+  .reward-screen { text-align: center; padding: 10px 0 4px; }
+  .reward-title {
+    font-family: var(--display);
+    font-size: 1.5rem;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(200,169,81,0.4);
+    margin-bottom: 4px;
+  }
+  .reward-subtitle { font-size: 0.72rem; color: var(--muted); margin-bottom: 18px; letter-spacing: 0.1em; }
+  .reward-options { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .reward-btn {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+    background: #1a1a26;
+    color: var(--text);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    min-width: 160px;
+    text-align: left;
+    line-height: 1.6;
+  }
+  .reward-btn:hover { border-color: var(--accent); background: #22223a; }
+  .reward-btn .rb-title { font-family: var(--display); font-size: 0.95rem; color: var(--accent); display: block; margin-bottom: 4px; }
+  .reward-btn .rb-desc  { font-size: 0.72rem; color: var(--muted); display: block; }
+
+  /* Die-pick sub-screen */
+  .die-pick { text-align: center; padding: 8px 0; }
+  .die-pick-title { font-family: var(--display); font-size: 1rem; letter-spacing: 0.15em; color: var(--text); margin-bottom: 14px; }
+  .die-pick-options { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .die-pick-btn {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    padding: 12px 20px;
+    border: 1px solid var(--border);
+    background: #1a1a26;
+    color: var(--text);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    min-width: 100px;
+    text-align: center;
+    line-height: 1.5;
+  }
+  .die-pick-btn:hover { border-color: var(--accent2); background: #22223a; }
+  .die-pick-btn .dpb-name  { font-family: var(--display); font-size: 1.1rem; color: var(--accent); }
+  .die-pick-btn .dpb-level { font-size: 0.68rem; color: var(--accent2); margin-top: 2px; }
+
+  /* Ability pick sub-screen */
+  .ability-pick { text-align: center; padding: 8px 0; }
+  .ability-pick-title { font-family: var(--display); font-size: 1rem; letter-spacing: 0.15em; color: var(--text); margin-bottom: 6px; }
+  .ability-pick-sub { font-size: 0.7rem; color: var(--muted); margin-bottom: 14px; }
+  .ability-pick-options { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .ability-pick-btn {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    padding: 12px 20px;
+    border: 1px solid var(--border);
+    background: #1a1a26;
+    color: var(--text);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    min-width: 110px;
+    text-align: center;
+    line-height: 1.5;
+  }
+  .ability-pick-btn:hover { border-color: var(--accent); background: #22223a; }
+  .ability-pick-btn .apb-name  { font-family: var(--display); font-size: 1rem; color: var(--accent); }
+  .ability-pick-btn.has-ability .apb-name { color: #a0c060; }
+  .ability-pick-btn .apb-desc  { font-size: 0.68rem; color: var(--muted); margin-top: 2px; }
+  .ability-pick-btn .apb-level { font-size: 0.68rem; color: var(--accent2); margin-top: 2px; }
+
+  .phase-hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<h1>DICEBOUND</h1>
+<p class="subtitle">a roguelike dice prototype</p>
+
+<div id="game">
+
+  <!-- STATUS -->
+  <div class="panel" id="status-panel">
+    <div class="wave-bar" id="wave-bar" style="display:none">
+      WAVE <strong id="wave-num">1</strong>
+      &nbsp;·&nbsp;
+      ENEMY <strong id="enemy-num">1</strong> OF <strong id="enemy-total">3</strong>
+    </div>
+    <div class="panel-title">Combatants</div>
+    <div class="combatants">
+      <div class="combatant-block">
+        <div class="combatant-name">PLAYER</div>
+        <div class="hp-info">
+          <span>HP</span>
+          <span id="player-hp-text">30 / 30</span>
+        </div>
+        <div class="hp-bar-track"><div class="hp-bar-fill player-fill" id="player-hp-bar" style="width:100%"></div></div>
+        <div class="stat-row shield-stat">
+          <span class="stat-label">🛡 Shield</span>
+          <span class="stat-val shield-val-text" id="shield-val">0</span>
+        </div>
+        <div class="stat-row" style="margin-top:3px;">
+          <span class="stat-label" style="color:var(--accent2);">⚡ per turn</span>
+          <span class="stat-val" style="color:var(--accent2); font-size:0.8rem;" id="energy-per-turn-display">3</span>
+        </div>
+        <div class="stat-row" id="rage-row" style="margin-top:3px;display:none;">
+          <span class="stat-label" style="color:#e07030;">⚔ Rage</span>
+          <span class="stat-val" style="color:#e07030; font-size:0.8rem;" id="rage-val">0</span>
+        </div>
+        <div class="stat-row" id="thorns-row" style="margin-top:3px;display:none;">
+          <span class="stat-label" style="color:#b060c0;">🌿 Thorns</span>
+          <span class="stat-val" style="color:#b060c0; font-size:0.8rem;" id="thorns-val">0</span>
+        </div>
+      </div>
+      <div class="combatant-block" id="enemy-block" style="display:none">
+        <div class="combatant-name enemy-name" id="enemy-name-display">ENEMY</div>
+        <div class="hp-info">
+          <span>HP</span>
+          <span id="enemy-hp-text">— / —</span>
+        </div>
+        <div class="hp-bar-track"><div class="hp-bar-fill enemy-fill" id="enemy-hp-bar" style="width:100%"></div></div>
+        <div class="enemy-intro" id="enemy-atk-info"></div>
+        <div class="stat-row" id="poison-row" style="margin-top:3px;display:none;">
+          <span class="stat-label" style="color:#a0c060;">☠ Poison</span>
+          <span class="stat-val" style="color:#a0c060; font-size:0.8rem;" id="poison-val">0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ASSIGNMENT PHASE -->
+  <div class="panel" id="assign-panel">
+    <div class="panel-title">Assign Abilities to Dice</div>
+    <div style="font-size:0.72rem; color:var(--muted); margin-bottom:12px;">d4 costs 1 energy &nbsp;|&nbsp; d6 costs 2 energy &nbsp;|&nbsp; d8 costs 3 energy</div>
+    <div class="assign-grid" id="assign-grid">
+      <!-- generated by JS -->
+    </div>
+    <br>
+    <button class="big-btn" id="start-combat-btn" style="display:none" onclick="startCombat()">⚔ Start Combat</button>
+  </div>
+
+  <!-- COMBAT PHASE -->
+  <div class="panel phase-hidden" id="combat-panel">
+    <div class="energy-bar">
+      <span class="energy-label">⚡ Energy</span>
+      <span class="energy-value" id="energy-value">3</span>
+      <div class="energy-pips" id="energy-pips"></div>
+    </div>
+    <div class="panel-title" style="margin-bottom:10px;">Your Turn — Roll Dice or End Turn</div>
+    <div class="combat-actions">
+      <div class="dice-buttons" id="dice-buttons"></div>
+      <button class="end-turn-btn" id="end-turn-btn" onclick="endTurn()">End Turn ›</button>
+    </div>
+  </div>
+
+  <!-- OUTCOME -->
+  <div class="panel phase-hidden" id="outcome-panel">
+    <div class="outcome">
+      <div class="outcome-title" id="outcome-title"></div>
+      <button class="big-btn" id="outcome-btn"></button>
+    </div>
+  </div>
+
+  <!-- REWARD PHASE -->
+  <div class="panel phase-hidden" id="reward-panel">
+    <div class="reward-screen">
+      <div class="reward-title" id="reward-wave-label">WAVE COMPLETE</div>
+      <div class="reward-subtitle">Choose a reward before the next wave.</div>
+      <div class="reward-options" id="reward-options"></div>
+    </div>
+  </div>
+
+  <!-- DIE UPGRADE PICK -->
+  <div class="panel phase-hidden" id="die-pick-panel">
+    <div class="die-pick">
+      <div class="die-pick-title">Which die will you upgrade?</div>
+      <div class="die-pick-options" id="die-pick-options"></div>
+    </div>
+  </div>
+
+  <!-- ABILITY PICK -->
+  <div class="panel phase-hidden" id="ability-pick-panel">
+    <div class="ability-pick">
+      <div class="ability-pick-title" id="ability-pick-title">Choose an Ability</div>
+      <div class="ability-pick-sub" id="ability-pick-sub"></div>
+      <div class="ability-pick-options" id="ability-pick-options"></div>
+    </div>
+  </div>
+
+  <!-- DIE-FOR-ABILITY PICK -->
+  <div class="panel phase-hidden" id="ability-die-pick-panel">
+    <div class="die-pick">
+      <div class="die-pick-title" id="ability-die-pick-title">Assign to which die?</div>
+      <div class="die-pick-options" id="ability-die-pick-options"></div>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="panel">
+    <div class="panel-title">Combat Log</div>
+    <div id="log"><div class="log-entry muted">Assign your dice to begin...</div></div>
+  </div>
+
+</div>
+
+<script>
+// ─── Constants ───────────────────────────────────────────────────────────────
+const DICE      = ['d4','d6','d8'];
+const ABILITIES = ['Damage','Shield','Heal'];
+const SPECIAL_ABILITIES = ['Poison','Rage','Thorns'];
+const ABILITY_DESCS = {
+  Poison: 'Deals extra damage on hit.',
+  Rage:   'Bonus damage when HP is low.',
+  Thorns: 'Reflects damage when hit.',
+};
+
+const ENEMY_DEFS = {
+  Rat:    { hp: 10, die: 'd4' },
+  Goblin: { hp: 15, die: 'd6' },
+  Orc:    { hp: 25, die: 'd8' },
+};
+const DIE_SIDES = { d4: 4, d6: 6, d8: 8 };
+const DIE_COSTS = { d4: 1, d6: 2, d8: 3 };
+const MAX_PIPS  = 9;
+
+const PRESET_WAVES = [
+  ['Rat','Rat','Goblin'],
+  ['Rat','Rat','Goblin','Goblin','Goblin'],
+  ['Rat','Goblin','Goblin','Orc','Orc'],
+  ['Goblin','Goblin','Orc','Orc','Orc','Orc'],
+  ['Goblin','Orc','Orc','Orc','Orc','Orc'],
+];
+
+// HP added per completed wave for each enemy type
+const HP_SCALE = { Rat: 2, Goblin: 3, Orc: 5 };
+// Attack bonus: +1 per every 2 completed waves
+function enemyAtkBonus(wavesCompleted) { return Math.floor(wavesCompleted / 2); }
+
+// ─── State ───────────────────────────────────────────────────────────────────
+let player, shield, energy, energyPerTurn, dieUpgrades, abilityLevels;
+let rage, thorns, enemyPoison;
+let assignments, phase, enemyTurnLocked;
+let waveNum, waveEnemies, enemyIndex, enemy;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function roll(die) { return Math.floor(Math.random() * DIE_SIDES[die]) + 1; }
+function dieName(die) { const u = dieUpgrades[die]; return u > 0 ? `${die}+${u}` : die; }
+function dieMax(die)  { return DIE_SIDES[die] + dieUpgrades[die]; }
+
+function abilityDisplayName(ability) {
+  const lvl = abilityLevels[ability];
+  if (!lvl) return ability;
+  const numerals = ['','I','II','III','IV','V'];
+  return ability + ' ' + (numerals[Math.min(lvl, 5)] || lvl);
+}
+
+function abilityCSSClass(ability) {
+  if (ability === 'Damage') return 'dmg';
+  if (ability === 'Shield') return 'shld';
+  if (ability === 'Heal')   return 'heal';
+  if (ability === 'Poison') return 'poison';
+  if (ability === 'Rage')   return 'rage';
+  if (ability === 'Thorns') return 'thorns';
+  return '';
+}
+
+function getWaveEnemies(n) {
+  if (n <= PRESET_WAVES.length) return [...PRESET_WAVES[n - 1]];
+  const count = 5 + (n - 5); // grows: wave 6=6, wave 7=7, etc.
+  return Array.from({length: count}, () => {
+    const r = Math.random() * 100;
+    const orcChance = Math.min(90, (n - 5) * 20);
+    const gobChance = Math.min(80, 40 + (n - 5) * 5);
+    return r < orcChance ? 'Orc' : r < gobChance ? 'Goblin' : 'Rat';
+  });
+}
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+function init() {
+  player        = { hp: 30, maxHp: 30 };
+  shield        = 0;
+  energy        = 0;
+  energyPerTurn = 3;
+  dieUpgrades   = { d4: 0, d6: 0, d8: 0 };
+  abilityLevels = {};
+  rage          = 0;
+  thorns        = 0;
+  enemyPoison   = 0;
+  assignments   = {};
+  phase         = 'assign';
+  enemyTurnLocked = false;
+  waveNum       = 0;
+  waveEnemies   = [];
+  enemyIndex    = 0;
+
+  show('assign-panel');
+  hide('combat-panel');
+  hide('outcome-panel');
+  hide('reward-panel');
+  hide('die-pick-panel');
+  hide('ability-pick-panel');
+  hide('ability-die-pick-panel');
+  hide('enemy-block');
+  document.getElementById('wave-bar').style.display = 'none';
+
+  updatePlayerUI();
+  updateShieldUI();
+  updateEnergyPerTurnUI();
+  rage = 0; thorns = 0; enemyPoison = 0;
+  updateRageUI(); updateThornsUI(); updatePoisonUI();
+  buildAssignUI();
+  clearLog();
+  addLog('Assign your dice abilities to begin.', 'muted');
+}
+
+// ─── Wave / Enemy ─────────────────────────────────────────────────────────────
+function startWave(n) {
+  waveNum     = n;
+  waveEnemies = getWaveEnemies(n);
+  enemyIndex  = 0;
+  addLog(`━━ Wave ${waveNum} begins! ━━`, 'system');
+  updateWaveUI();
+  spawnEnemy();
+}
+
+function spawnEnemy() {
+  const name      = waveEnemies[enemyIndex];
+  const def       = ENEMY_DEFS[name];
+  const completed = waveNum - 1; // waves completed before this one
+  const scaledHp  = def.hp + HP_SCALE[name] * completed;
+  const atkBonus  = enemyAtkBonus(completed);
+  enemy = { name, hp: scaledHp, currentHp: scaledHp, die: def.die, atkBonus };
+  enemyPoison = 0;
+  updatePoisonUI();
+  enemyTurnLocked = false;
+  show('enemy-block');
+  updateEnemyUI();
+  updateWaveUI();
+  const atkLabel = atkBonus > 0 ? `${def.die}+${atkBonus}` : def.die;
+  addLog(`▶ ${enemy.name} appears! (${scaledHp} HP, attacks with ${atkLabel})`, 'system');
+}
+
+function updateWaveUI() {
+  document.getElementById('wave-bar').style.display = '';
+  document.getElementById('wave-num').textContent    = waveNum;
+  document.getElementById('enemy-num').textContent   = enemyIndex + 1;
+  document.getElementById('enemy-total').textContent = waveEnemies.length;
+}
+
+// ─── Assignment UI ────────────────────────────────────────────────────────────
+function buildAssignUI() {
+  const grid = document.getElementById('assign-grid');
+  grid.innerHTML = '';
+  DICE.forEach(die => {
+    const row = document.createElement('div');
+    row.className = 'assign-row';
+    const label = document.createElement('div');
+    label.className = 'die-label';
+    label.textContent = die;
+    row.appendChild(label);
+    ABILITIES.forEach(ab => {
+      const btn = document.createElement('button');
+      btn.className = 'assign-btn';
+      btn.textContent = ab;
+      btn.dataset.die     = die;
+      btn.dataset.ability = ab;
+      btn.onclick = () => selectAssignment(die, ab, btn);
+      row.appendChild(btn);
+    });
+    grid.appendChild(row);
+  });
+}
+
+function selectAssignment(die, ability, btn) {
+  document.querySelectorAll(`.assign-btn[data-die="${die}"]`).forEach(b =>
+    b.classList.remove('selected','ability-shield','ability-heal'));
+  document.querySelectorAll(`.assign-btn[data-ability="${ability}"]`).forEach(b => {
+    b.classList.remove('selected','ability-shield','ability-heal');
+    if (assignments[b.dataset.die] === ability) delete assignments[b.dataset.die];
+  });
+  assignments[die] = ability;
+  btn.classList.add('selected');
+  if (ability === 'Shield') btn.classList.add('ability-shield');
+  if (ability === 'Heal')   btn.classList.add('ability-heal');
+  document.getElementById('start-combat-btn').style.display =
+    Object.keys(assignments).length === 3 ? 'inline-block' : 'none';
+}
+
+function startCombat() {
+  hide('assign-panel');
+  show('combat-panel');
+  phase  = 'combat';
+  energy = 0;
+  startWave(1);
+  startPlayerTurn(true);
+}
+
+// ─── Player turn ──────────────────────────────────────────────────────────────
+function startPlayerTurn(isFirst) {
+  enemyTurnLocked = false;
+  energy += energyPerTurn;
+  const label = isFirst ? 'Your turn begins.' : 'New turn.';
+  addLog(`— ${label} You gain ${energyPerTurn} Energy. Current Energy: ${energy}.`, 'energy-log');
+  updateEnergyUI();
+  buildDiceButtons();
+}
+
+// ─── Combat UI ────────────────────────────────────────────────────────────────
+function buildDiceButtons() {
+  const container = document.getElementById('dice-buttons');
+  container.innerHTML = '';
+  DICE.forEach(die => {
+    const ab        = assignments[die];
+    const cost      = DIE_COSTS[die];
+    const canAfford = energy >= cost;
+    const label     = dieName(die);
+    const isPoisonBlocked = (ab === 'Poison' && enemyPoison > 0);
+    const btn = document.createElement('button');
+    btn.className = 'die-btn' + (!canAfford || isPoisonBlocked ? ' too-costly' : '');
+    btn.disabled  = !canAfford || enemyTurnLocked || isPoisonBlocked;
+    const abClass   = abilityCSSClass(ab);
+    const abDisplay = abilityDisplayName(ab);
+    const costLabel = isPoisonBlocked ? 'Already poisoned' : `Cost: ${cost} ⚡`;
+    btn.innerHTML = `<div class="die-name">${label}</div><div class="die-ability ${abClass}">${abDisplay}</div><div class="die-cost">${costLabel}</div>`;
+    btn.onclick = () => playerAction(die);
+    container.appendChild(btn);
+  });
+  document.getElementById('end-turn-btn').disabled = enemyTurnLocked;
+}
+
+function playerAction(die) {
+  if (energy < DIE_COSTS[die] || enemyTurnLocked || phase !== 'combat') return;
+
+  const ability = assignments[die];
+  if (ability === 'Poison' && enemyPoison > 0) {
+    addLog(`${enemy.name} is already poisoned (${enemyPoison} remaining). Cannot apply Poison.`, 'muted');
+    return;
+  }
+
+  const cost     = DIE_COSTS[die];
+  const baseRoll = roll(die);
+  const result   = baseRoll + dieUpgrades[die];
+  const isCrit   = result === dieMax(die);
+  const label    = dieName(die);
+  const abName   = abilityDisplayName(ability);
+  const lvl      = abilityLevels[ability] || 0;
+
+  energy -= cost;
+
+  // Apply Rage bonus to the effective value (consumed after use)
+  const rageBonus  = rage;
+  const effective  = result + rageBonus;
+  const rageNote   = rageBonus > 0 ? ` (+${rageBonus} Rage)` : '';
+
+  if (ability === 'Damage') {
+    enemy.currentHp = Math.max(0, enemy.currentHp - effective);
+    addLog(`You rolled ${label} ${abName} for ${effective} damage${rageNote}. Energy remaining: ${energy}.`, 'dmg');
+  } else if (ability === 'Shield') {
+    shield += effective;
+    addLog(`You rolled ${label} ${abName} for ${effective} shield${rageNote}. Energy remaining: ${energy}.`, 'shield-log');
+    updateShieldUI();
+  } else if (ability === 'Heal') {
+    const healed = Math.min(effective, player.maxHp - player.hp);
+    player.hp = Math.min(player.maxHp, player.hp + effective);
+    addLog(`You rolled ${label} ${abName} for ${healed} HP${rageNote}. Energy remaining: ${energy}.`, 'heal-log');
+  } else if (ability === 'Poison') {
+    const poisonBonus = lvl > 0 ? (lvl - 1) * 2 : 0;
+    const poisonAmt   = effective + poisonBonus;
+    enemyPoison = poisonAmt;
+    addLog(`You rolled ${label} ${abName} — applied ${poisonAmt} poison${rageNote} to ${enemy.name}. Energy remaining: ${energy}.`, 'poison-log');
+    updatePoisonUI();
+  } else if (ability === 'Rage') {
+    const rageBonus2  = lvl > 0 ? (lvl - 1) * 2 : 0;
+    const rageGained  = effective + rageBonus2;
+    rage = rageGained; // replaces existing rage
+    addLog(`You rolled ${label} ${abName} — gained ${rageGained} Rage${rageNote}. Energy remaining: ${energy}.`, 'rage-log');
+    updateRageUI();
+  } else if (ability === 'Thorns') {
+    const thornsBonus = lvl > 0 ? (lvl - 1) * 2 : 0;
+    const thornsAmt   = effective + thornsBonus;
+    thorns += thornsAmt;
+    addLog(`You rolled ${label} ${abName} — gained ${thornsAmt} Thorns${rageNote}. Energy remaining: ${energy}.`, 'thorns-log');
+    updateThornsUI();
+  }
+
+  // Consume rage after any non-Rage ability use
+  if (ability !== 'Rage' && rageBonus > 0) {
+    rage = 0;
+    addLog(`Rage consumed.`, 'rage-log');
+    updateRageUI();
+  }
+
+  if (isCrit) {
+    energy += cost;
+    addLog(`✦ CRITICAL! Refunded ${cost} Energy. Current Energy: ${energy}.`, 'crit');
+  }
+
+  updatePlayerUI();
+  updateEnemyUI();
+  updateEnergyUI();
+
+  if (enemy.currentHp <= 0) {
+    addLog(`${enemy.name} is defeated!`, 'system');
+    setTimeout(onEnemyDefeated, 400);
+    return;
+  }
+  buildDiceButtons();
+}
+
+function onEnemyDefeated() {
+  enemyIndex++;
+  if (enemyIndex >= waveEnemies.length) {
+    addLog(`━━ Wave ${waveNum} complete! ━━`, 'system');
+    hide('combat-panel');
+    hide('enemy-block');
+    showReward();
+  } else {
+    setTimeout(() => { spawnEnemy(); startPlayerTurn(true); }, 500);
+  }
+}
+
+function endTurn() {
+  if (enemyTurnLocked || phase !== 'combat') return;
+  enemyTurnLocked = true;
+  addLog(`You end your turn.`, 'muted');
+  buildDiceButtons();
+  setTimeout(enemyAttack, 500);
+}
+
+function enemyAttack() {
+  // ── Poison tick (happens at the start of enemy turn) ───────────────────────
+  if (enemyPoison > 0) {
+    enemy.currentHp = Math.max(0, enemy.currentHp - enemyPoison);
+    addLog(`☠ ${enemy.name} takes ${enemyPoison} poison damage. (${enemy.currentHp}/${enemy.hp} HP)`, 'poison-log');
+    enemyPoison = Math.max(0, enemyPoison - 1);
+    updatePoisonUI();
+    updateEnemyUI();
+    if (enemy.currentHp <= 0) {
+      addLog(`${enemy.name} succumbs to poison!`, 'system');
+      setTimeout(onEnemyDefeated, 400);
+      return;
+    }
+  }
+
+  // ── Enemy attack ──────────────────────────────────────────────────────────
+  const baseRoll = roll(enemy.die);
+  const bonus    = enemy.atkBonus || 0;
+  const dmg      = baseRoll + bonus;
+  const rollDesc = bonus > 0
+    ? `${enemy.name} rolled ${baseRoll} + ${bonus} = ${dmg} damage.`
+    : `${enemy.name} rolled ${enemy.die} → ${dmg} damage.`;
+  addLog(rollDesc, 'dmg');
+
+  let remaining = dmg;
+  if (shield > 0) {
+    const blocked = Math.min(shield, dmg);
+    remaining = dmg - blocked;
+    shield -= blocked;
+    addLog(`Shield absorbs ${blocked}.${remaining > 0 ? ` ${remaining} gets through.` : ' All damage blocked!'}`, 'shield-log');
+    updateShieldUI();
+  }
+  if (remaining > 0) {
+    player.hp = Math.max(0, player.hp - remaining);
+    addLog(`You take ${remaining} damage. (HP: ${player.hp}/${player.maxHp})`, 'dmg');
+  }
+
+  // ── Thorns reflect (based on original attack dmg, limited by thorns pool) ─
+  if (thorns > 0) {
+    const reflected = Math.min(thorns, dmg);
+    enemy.currentHp = Math.max(0, enemy.currentHp - reflected);
+    thorns -= reflected;
+    addLog(`🌿 Thorns reflect ${reflected} damage to ${enemy.name}. (${enemy.currentHp}/${enemy.hp} HP) Thorns: ${thorns}`, 'thorns-log');
+    updateThornsUI();
+    updateEnemyUI();
+    if (enemy.currentHp <= 0) {
+      updatePlayerUI();
+      addLog(`${enemy.name} is destroyed by Thorns!`, 'system');
+      setTimeout(onEnemyDefeated, 400);
+      return;
+    }
+  }
+
+  updatePlayerUI();
+  if (player.hp <= 0) {
+    addLog('You have been defeated...', 'system');
+    setTimeout(showGameOver, 400);
+    return;
+  }
+  setTimeout(() => startPlayerTurn(false), 300);
+}
+
+// ─── Reward system ────────────────────────────────────────────────
+function showReward() {
+  phase = 'reward';
+  show('reward-panel');
+  document.getElementById('reward-wave-label').textContent = `WAVE ${waveNum} COMPLETE`;
+
+  const opts = document.getElementById('reward-options');
+  opts.innerHTML = '';
+
+  const rewards = [
+    {
+      title: '+5 Max HP',
+      desc:  `Max HP ${player.maxHp} → ${player.maxHp + 5}. Current HP also +5.`,
+      fn() {
+        player.maxHp += 5;
+        player.hp = Math.min(player.maxHp, player.hp + 5);
+        addLog(`Reward: +5 Max HP. HP is now ${player.hp}/${player.maxHp}.`, 'heal-log');
+        afterReward();
+      }
+    },
+    {
+      title: 'Upgrade a Die',
+      desc:  "Add +1 to a die's roll result permanently.",
+      fn() {
+        hide('reward-panel');
+        showDiePick();
+      }
+    },
+    {
+      title: 'New / Upgrade Ability',
+      desc:  'Learn Poison, Rage, or Thorns — or level up one you already have.',
+      fn() {
+        hide('reward-panel');
+        showAbilityPick();
+      }
+    },
+  ];
+
+  rewards.forEach(r => {
+    const btn = document.createElement('button');
+    btn.className = 'reward-btn';
+    btn.innerHTML = `<span class="rb-title">${r.title}</span><span class="rb-desc">${r.desc}</span>`;
+    btn.onclick = () => { hide('reward-panel'); r.fn(); };
+    opts.appendChild(btn);
+  });
+}
+
+function showDiePick() {
+  show('die-pick-panel');
+  const opts = document.getElementById('die-pick-options');
+  opts.innerHTML = '';
+  DICE.forEach(die => {
+    const u   = dieUpgrades[die];
+    const btn = document.createElement('button');
+    btn.className = 'die-pick-btn';
+    btn.innerHTML = `<div class="dpb-name">${die}${u > 0 ? '+' + u : ''}</div><div class="dpb-level">+${u} → +${u + 1} (rolls ${1 + u + 1}–${dieMax(die) + 1})</div>`;
+    btn.onclick = () => {
+      dieUpgrades[die]++;
+      addLog(`Reward: ${die} upgraded to +${dieUpgrades[die]}. Now rolls ${1 + dieUpgrades[die]}–${dieMax(die)}.`, 'crit');
+      hide('die-pick-panel');
+      afterReward();
+    };
+    opts.appendChild(btn);
+  });
+}
+
+function showAbilityPick() {
+  show('ability-pick-panel');
+  document.getElementById('ability-pick-title').textContent = 'Choose an Ability';
+  document.getElementById('ability-pick-sub').textContent =
+    'Already have it? Level it up. New? Assign it to a die.';
+
+  const opts = document.getElementById('ability-pick-options');
+  opts.innerHTML = '';
+  const numerals = ['','I','II','III','IV','V'];
+
+  SPECIAL_ABILITIES.forEach(ab => {
+    const existing = abilityLevels[ab] || 0;
+    const btn = document.createElement('button');
+    btn.className = 'ability-pick-btn' + (existing ? ' has-ability' : '');
+    const levelText = existing
+      ? `Level ${numerals[Math.min(existing,5)] || existing} → ${numerals[Math.min(existing+1,5)] || existing+1}`
+      : 'New — assign to a die';
+    btn.innerHTML = `<div class="apb-name">${ab}</div><div class="apb-desc">${ABILITY_DESCS[ab]}</div><div class="apb-level">${levelText}</div>`;
+    btn.onclick = () => {
+      hide('ability-pick-panel');
+      if (existing) {
+        abilityLevels[ab]++;
+        const newLevel = numerals[Math.min(abilityLevels[ab],5)] || abilityLevels[ab];
+        addLog(`Reward: ${ab} upgraded to level ${newLevel}.`, 'crit');
+        afterReward();
+      } else {
+        showAbilityDiePick(ab);
+      }
+    };
+    opts.appendChild(btn);
+  });
+}
+
+function showAbilityDiePick(chosenAbility) {
+  show('ability-die-pick-panel');
+  document.getElementById('ability-die-pick-title').textContent =
+    `Assign ${chosenAbility} to which die?`;
+
+  const opts = document.getElementById('ability-die-pick-options');
+  opts.innerHTML = '';
+
+  DICE.forEach(die => {
+    const u          = dieUpgrades[die];
+    const curAbility = assignments[die];
+    const btn = document.createElement('button');
+    btn.className = 'die-pick-btn';
+    const dLabel = u > 0 ? `${die}+${u}` : die;
+    btn.innerHTML = `<div class="dpb-name">${dLabel}</div><div class="dpb-level">replaces ${abilityDisplayName(curAbility)}</div>`;
+    btn.onclick = () => {
+      assignments[die]          = chosenAbility;
+      abilityLevels[chosenAbility] = 1;
+      addLog(`Reward: ${dLabel} now uses ${chosenAbility} I (replaced ${abilityDisplayName(curAbility)}).`, 'crit');
+      hide('ability-die-pick-panel');
+      afterReward();
+    };
+    opts.appendChild(btn);
+  });
+}
+function afterReward() {
+  updatePlayerUI();
+  updateShieldUI();
+  updateEnergyPerTurnUI();
+  updateRageUI();
+  updateThornsUI();
+  updatePoisonUI();
+  show('combat-panel');
+  show('enemy-block');
+  phase  = 'combat';
+  energy = 0;
+  startWave(waveNum + 1);
+  startPlayerTurn(true);
+}
+
+// ─── Game Over ────────────────────────────────────────────────────────────────
+function showGameOver() {
+  phase = 'outcome';
+  hide('combat-panel');
+  show('outcome-panel');
+  const title = document.getElementById('outcome-title');
+  const btn   = document.getElementById('outcome-btn');
+  title.textContent = 'GAME OVER';
+  title.className   = 'outcome-title lose';
+  btn.textContent   = '↺ Play Again';
+  btn.onclick = () => { hide('outcome-panel'); init(); };
+}
+
+// ─── UI Helpers ───────────────────────────────────────────────────────────────
+function updatePlayerUI() {
+  document.getElementById('player-hp-text').textContent = `${player.hp} / ${player.maxHp}`;
+  document.getElementById('player-hp-bar').style.width  = (player.hp / player.maxHp * 100) + '%';
+}
+
+function updateEnemyUI() {
+  document.getElementById('enemy-name-display').textContent = enemy.name.toUpperCase();
+  document.getElementById('enemy-hp-text').textContent      = `${enemy.currentHp} / ${enemy.hp}`;
+  document.getElementById('enemy-hp-bar').style.width       = (enemy.currentHp / enemy.hp * 100) + '%';
+  const atkLabel = (enemy.atkBonus > 0) ? `${enemy.die}+${enemy.atkBonus}` : enemy.die;
+  document.getElementById('enemy-atk-info').innerHTML       = `Attacks with <span>${atkLabel}</span>`;
+}
+
+function updateEnergyUI() {
+  document.getElementById('energy-value').textContent = energy;
+  const pipsEl = document.getElementById('energy-pips');
+  pipsEl.innerHTML = '';
+  const display = Math.min(energy, MAX_PIPS);
+  for (let i = 0; i < display; i++) {
+    const pip = document.createElement('div');
+    pip.className = 'pip';
+    pipsEl.appendChild(pip);
+  }
+  if (energy > MAX_PIPS) {
+    const more = document.createElement('span');
+    more.style.cssText = 'font-size:0.65rem;color:var(--muted);margin-left:2px;';
+    more.textContent = `+${energy - MAX_PIPS}`;
+    pipsEl.appendChild(more);
+  }
+}
+
+function updateEnergyPerTurnUI() {
+  document.getElementById('energy-per-turn-display').textContent = energyPerTurn;
+}
+
+function updateShieldUI() {
+  document.getElementById('shield-val').textContent = shield;
+}
+
+function updateRageUI() {
+  const row = document.getElementById('rage-row');
+  row.style.display = rage > 0 ? '' : 'none';
+  document.getElementById('rage-val').textContent = rage;
+}
+
+function updateThornsUI() {
+  const row = document.getElementById('thorns-row');
+  row.style.display = thorns > 0 ? '' : 'none';
+  document.getElementById('thorns-val').textContent = thorns;
+}
+
+function updatePoisonUI() {
+  const row = document.getElementById('poison-row');
+  row.style.display = enemyPoison > 0 ? '' : 'none';
+  document.getElementById('poison-val').textContent = enemyPoison;
+}
+
+function addLog(msg, type = '') {
+  const log   = document.getElementById('log');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry' + (type ? ' ' + type : '');
+  entry.textContent = msg;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+}
+
+function clearLog() { document.getElementById('log').innerHTML = ''; }
+
+function show(id) {
+  const el = document.getElementById(id);
+  el.classList.remove('phase-hidden');
+  el.style.display = '';
+}
+function hide(id) {
+  document.getElementById(id).classList.add('phase-hidden');
+}
+
+// ─── Start ────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
