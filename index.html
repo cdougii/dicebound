@@ -1223,6 +1223,20 @@ function hide(id) {
   document.getElementById(id).classList.add('phase-hidden');
 }
 
+// ─── Keyboard shortcuts ────────────────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  if (phase !== 'combat') return;
+  
+  // Map number keys to dice: 1=d4, 2=d6, 3=d8
+  const diceMap = { '1': 'd4', '2': 'd6', '3': 'd8' };
+  const die = diceMap[e.key];
+  
+  if (die) {
+    e.preventDefault();
+    playerAction(die);
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 init();
 </script>
