@@ -510,7 +510,7 @@
         <div class="hp-bar-track"><div class="hp-bar-fill player-fill" id="player-hp-bar" style="width:100%"></div></div>
         <div class="stat-row shield-stat">
           <span class="stat-label">🛡 Shield</span>
-          <span class="stat-val shield-val-text" id="shield-val">0</span>
+          <span class="stat-val shield-val-text" id="shield-val">0 / 30</span>
         </div>
         <div class="stat-row" style="margin-top:3px;">
           <span class="stat-label" style="color:var(--accent2);">⚡ per turn</span>
@@ -715,6 +715,7 @@ function enemyScaling(waveNum) {
 // ─── State ───────────────────────────────────────────────────────────────────
 let player, shield, energy, energyPerTurn, dieUpgrades, abilityLevels;
 let rage, thorns, enemyPoison, playerPoison;
+let autoEndTimer = null;
 let assignments, phase, enemyTurnLocked;
 let waveNum, waveEnemies, enemyIndex, enemy;
 
@@ -740,25 +741,45 @@ function abilityCSSClass(ability) {
   return '';
 }
 
-// --- Poison helpers ---------------------------------------------------------
+// --- Poison helpers (unified logic for player and enemy) --------------------
+// Poison: deal 'amt' damage immediately, then store (amt) as ongoing DOT.
+// Each tick deals current stored value, then decrements by 1.
+// Healing clears poison. A new poison replaces existing poison.
+
 function applyPoisonToEnemy(amt) {
   if (amt <= 0) return;
+  // Immediate damage
   enemy.currentHp = Math.max(0, enemy.currentHp - amt);
   addLog(`Applied ${amt} Poison. ${enemy.name} immediately takes ${amt} Poison Damage. `
        + `(${enemy.currentHp}/${enemy.hp} HP)`, 'poison-log');
-  enemyPoison = Math.max(0, amt - 1);
-  if (enemyPoison > 0) addLog(`${enemy.name} is Poisoned (${enemyPoison}).`, 'poison-log');
+  // Store full amount as ongoing DOT (first tick will deal amt, then amt-1, etc.)
+  enemyPoison = amt;
+  addLog(`${enemy.name} is Poisoned (${enemyPoison}).`, 'poison-log');
   updatePoisonUI(); updateEnemyUI();
 }
 
 function applyPoisonToPlayer(amt) {
   if (amt <= 0) return;
+  // Immediate damage (ignores shield)
   player.hp = Math.max(0, player.hp - amt);
   addLog(`Applied ${amt} Poison. You immediately take ${amt} Poison Damage. `
        + `(${player.hp}/${player.maxHp} HP)`, 'poison-log');
-  playerPoison = Math.max(0, amt - 1);
-  if (playerPoison > 0) addLog(`You are Poisoned (${playerPoison}).`, 'poison-log');
+  // Store full amount as ongoing DOT
+  playerPoison = amt;
+  addLog(`You are Poisoned (${playerPoison}).`, 'poison-log');
   updatePlayerPoisonUI(); updatePlayerUI();
+}
+
+function clearEnemyPoison(reason) {
+  if (enemyPoison <= 0) return;
+  addLog(reason || `${enemy.name}'s Poison cleared.`, 'poison-log');
+  enemyPoison = 0; updatePoisonUI();
+}
+
+function clearPlayerPoison(reason) {
+  if (playerPoison <= 0) return;
+  addLog(reason || `Your Poison cleared.`, 'poison-log');
+  playerPoison = 0; updatePlayerPoisonUI();
 }
 
 function tickEnemyPoison() {
@@ -924,6 +945,7 @@ function startCombat() {
 
 // ─── Player turn ──────────────────────────────────────────────────────────────
 function startPlayerTurn(isFirst) {
+  clearTimeout(autoEndTimer); autoEndTimer = null;
   enemyTurnLocked = false;
   energy += energyPerTurn;
   const label = isFirst ? 'Your turn begins.' : 'New turn.';
@@ -991,11 +1013,12 @@ function playerAction(die) {
     enemy.currentHp = Math.max(0, enemy.currentHp - effective);
     addLog(`You rolled ${label} ${abName} for ${effective} damage${rageNote}. Energy remaining: ${energy}.`, 'dmg');
   } else if (ability === 'Shield') {
-    shield += effective;
-    addLog(`You rolled ${label} ${abName} for ${effective} shield${rageNote}. Energy remaining: ${energy}.`, 'shield-log');
+    const actualShield = gainShield(effective);
+    const capNote = actualShield < effective ? ` (capped at ${shieldCap()})` : '';
+    addLog(`You rolled ${label} ${abName} for ${actualShield} shield${rageNote}${capNote}. Energy remaining: ${energy}.`, 'shield-log');
     updateShieldUI();
   } else if (ability === 'Heal') {
-    if (playerPoison > 0) { addLog(`Healing removes your Poison!`, 'poison-log'); playerPoison = 0; updatePlayerPoisonUI(); }
+    clearPlayerPoison('Healing removes your Poison!');
     const healed = Math.min(effective, player.maxHp - player.hp);
     player.hp = Math.min(player.maxHp, player.hp + effective);
     addLog(`You rolled ${label} ${abName} for ${healed} HP${rageNote}. Energy remaining: ${energy}.`, 'heal-log');
@@ -1051,7 +1074,7 @@ function playerAction(die) {
   });
   if (!canStillAct) {
     addLog(`No affordable actions remaining — ending turn automatically.`, 'muted');
-    setTimeout(endTurn, 600);
+    autoEndTimer = setTimeout(endTurn, 600);
   }
 }
 
@@ -1069,9 +1092,11 @@ function onEnemyDefeated() {
 
 function endTurn() {
   if (enemyTurnLocked || phase !== 'combat') return;
+  clearTimeout(autoEndTimer); autoEndTimer = null; // cancel any pending auto-end
   enemyTurnLocked = true;
   addLog(`You end your turn.`, 'muted');
   buildDiceButtons();
+  // Tick player poison at end of player turn
   if (playerPoison > 0) {
     const died = tickPlayerPoison();
     if (died) { addLog('You succumb to poison...', 'system'); setTimeout(showGameOver, 400); return; }
@@ -1089,7 +1114,7 @@ function enemyAttack() {
 
   // Heal action
   if (action.type === 'heal') {
-    if (enemyPoison > 0) { addLog(`Healing removes ${enemy.name}'s Poison!`, 'poison-log'); enemyPoison = 0; updatePoisonUI(); }
+    clearEnemyPoison(`Healing removes ${enemy.name}'s Poison!`);
     const before = enemy.currentHp;
     enemy.currentHp = Math.min(enemy.hp, enemy.currentHp + dmg);
     const healed = enemy.currentHp - before;
@@ -1185,107 +1210,6 @@ function endTurn() {
   setTimeout(enemyAttack, 500);
 }
 
-function enemyAttack() {
-  // ── Poison tick ────────────────────────────────────────────────────────────
-  if (enemyPoison > 0) {
-    enemy.currentHp = Math.max(0, enemy.currentHp - enemyPoison);
-    addLog(`☠ ${enemy.name} takes ${enemyPoison} poison damage. (${enemy.currentHp}/${enemy.hp} HP)`, 'poison-log');
-    enemyPoison = Math.max(0, enemyPoison - 1);
-    updatePoisonUI();
-    updateEnemyUI();
-    if (enemy.currentHp <= 0) {
-      addLog(`${enemy.name} succumbs to poison!`, 'system');
-      setTimeout(onEnemyDefeated, 400);
-      return;
-    }
-  }
-
-  // ── Pick action (multi-action enemies choose randomly) ─────────────────────
-  const action   = enemy.actions[Math.floor(Math.random() * enemy.actions.length)];
-  const bonus    = enemy.atkBonus || 0;
-  const baseRoll = roll(action.die);
-  const dmg      = baseRoll + bonus;
-  const dieLabel = bonus > 0 ? `${action.die}+${bonus}` : action.die;
-
-  // ── Heal-type enemy action ─────────────────────────────────────────────────
-  if (action.type === 'heal') {
-    const before = enemy.currentHp;
-    enemy.currentHp = Math.min(enemy.hp, enemy.currentHp + dmg);
-    const healed = enemy.currentHp - before;
-    addLog(`${enemy.name} uses ${dieLabel} — heals for ${healed}. (${enemy.currentHp}/${enemy.hp} HP)`, 'dmg-heal-enemy');
-    updateEnemyUI();
-    setTimeout(() => startPlayerTurn(false), 300);
-    return;
-  }
-
-  // ── Offensive action — build log ────────────────────────────────────────────
-  const typeLabel = cap(action.type);
-  const rollDesc  = bonus > 0
-    ? `${enemy.name} rolled ${baseRoll} + ${bonus} = ${dmg} ${typeLabel} Damage.`
-    : `${enemy.name} rolled ${dieLabel} — ${dmg} ${typeLabel} Damage.`;
-  const logClass  = action.type === 'piercing' ? 'piercing' : action.type === 'poison' ? 'poison-log' : 'dmg';
-  addLog(rollDesc, logClass);
-
-  // ── Apply damage by type ───────────────────────────────────────────────────
-  let hpDmg = dmg; // damage that reaches HP
-
-  if (action.type === 'physical') {
-    // Shield absorbs all
-    if (shield > 0) {
-      const blocked = Math.min(shield, dmg);
-      hpDmg = dmg - blocked;
-      shield -= blocked;
-      addLog(`Shield absorbs ${blocked}.${hpDmg > 0 ? ` ${hpDmg} gets through.` : ' All blocked!'}`, 'shield-log');
-      updateShieldUI();
-    }
-  } else if (action.type === 'piercing') {
-    // Shield absorbs half (rounded down), other half bypasses
-    if (shield > 0) {
-      const shieldAmt  = Math.floor(dmg / 2);
-      const bypassAmt  = dmg - shieldAmt;
-      const actualBlock = Math.min(shield, shieldAmt);
-      shield -= actualBlock;
-      hpDmg  = (shieldAmt - actualBlock) + bypassAmt; // unblocked half + bypass
-      addLog(`Piercing: Shield absorbs ${actualBlock}, ${bypassAmt} bypasses shield.`, 'piercing');
-      updateShieldUI();
-    }
-    // else full dmg to HP
-  } else if (action.type === 'poison') {
-    // Poison ignores shield entirely
-    addLog(`Poison damage ignores Shield!`, 'poison-log');
-    hpDmg = dmg;
-  }
-
-  if (hpDmg > 0) {
-    player.hp = Math.max(0, player.hp - hpDmg);
-    addLog(`You take ${hpDmg} damage. (HP: ${player.hp}/${player.maxHp})`, 'dmg');
-  }
-
-  // ── Thorns reflect ─────────────────────────────────────────────────────────
-  if (thorns > 0 && action.type !== 'heal') {
-    const reflected = Math.min(thorns, dmg);
-    enemy.currentHp = Math.max(0, enemy.currentHp - reflected);
-    thorns -= reflected;
-    addLog(`🌿 Thorns reflect ${reflected} to ${enemy.name}. (${enemy.currentHp}/${enemy.hp} HP) Thorns: ${thorns}`, 'thorns-log');
-    updateThornsUI();
-    updateEnemyUI();
-    if (enemy.currentHp <= 0) {
-      updatePlayerUI();
-      addLog(`${enemy.name} is destroyed by Thorns!`, 'system');
-      setTimeout(onEnemyDefeated, 400);
-      return;
-    }
-  }
-
-  updatePlayerUI();
-  if (player.hp <= 0) {
-    addLog('You have been defeated...', 'system');
-    setTimeout(showGameOver, 400);
-    return;
-  }
-  setTimeout(() => startPlayerTurn(false), 300);
-}
-
 // ─── Reward system ────────────────────────────────────────────────
 function showReward() {
   phase = 'reward';
@@ -1322,6 +1246,7 @@ function showReward() {
       fn() {
         player.maxHp += 5;
         player.hp = Math.min(player.maxHp, player.hp + 5);
+        shield = Math.min(shield, shieldCap()); // re-clamp to new cap (shield cap grows with maxHp)
         addLog(`Reward: +5 Max HP. HP is now ${player.hp}/${player.maxHp}.`, 'heal-log');
         afterReward();
       }
@@ -1501,7 +1426,14 @@ function updateEnergyPerTurnUI() {
 }
 
 function updateShieldUI() {
-  document.getElementById('shield-val').textContent = shield;
+  document.getElementById('shield-val').textContent = `${shield} / ${player.maxHp}`;
+}
+
+function shieldCap() { return player.maxHp; }
+function gainShield(amt) {
+  const before = shield;
+  shield = Math.min(shield + amt, shieldCap());
+  return shield - before; // actual gained
 }
 
 function updateRageUI() {
