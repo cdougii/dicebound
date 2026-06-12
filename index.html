@@ -594,6 +594,51 @@
   }
   .target-cancel:hover { color: var(--text); }
 
+  /* Dev panel */
+  #dev-panel {
+    position: fixed; bottom: 12px; right: 12px; z-index: 200;
+    background: #0d0d0f; border: 1px solid #c8a951;
+    border-radius: 4px; padding: 10px 12px; font-family: var(--mono);
+    font-size: 0.72rem; color: var(--text); min-width: 220px;
+  }
+  #dev-panel summary {
+    cursor: pointer; color: var(--accent); letter-spacing: 0.1em;
+    font-size: 0.7rem; user-select: none; list-style: none;
+  }
+  #dev-panel summary::-webkit-details-marker { display: none; }
+  #dev-panel .dev-row { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  #dev-panel label { color: var(--muted); font-size: 0.68rem; }
+  #dev-panel input[type=number] {
+    width: 46px; background: #1a1a26; border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 0.72rem;
+    padding: 3px 5px; border-radius: 2px;
+  }
+  #dev-panel button {
+    font-family: var(--mono); font-size: 0.7rem; padding: 4px 10px;
+    background: #1a1a26; border: 1px solid var(--border); color: var(--accent);
+    border-radius: 2px; cursor: pointer;
+  }
+  #dev-panel button:hover { border-color: var(--accent); background: #22223a; }
+  #dev-panel select {
+    background: #1a1a26; border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 0.72rem;
+    padding: 3px 5px; border-radius: 2px;
+  }
+  #dev-panel .dev-section {
+    border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px;
+    color: var(--accent); font-size: 0.65rem; letter-spacing: 0.1em; margin-bottom: 4px;
+  }
+  #dev-panel .dev-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; margin-top: 4px;
+  }
+  #dev-panel .dev-grid label { color: var(--muted); font-size: 0.65rem; align-self: center; }
+  #dev-panel .dev-grid input, #dev-panel .dev-grid select { width: 100%; }
+  #dev-panel .dev-apply {
+    margin-top: 8px; width: 100%; background: #1a2a1a;
+    border-color: var(--heal); color: var(--heal);
+  }
+  #dev-panel .dev-apply:hover { background: #223322; }
+
   .phase-hidden { display: none !important; }
 </style>
 </head>
@@ -739,6 +784,51 @@
 
 </div>
 
+<!-- DEV CONTROLS -->
+<details id="dev-panel">
+  <summary>⚙ DEV</summary>
+
+  <div class="dev-section">NAVIGATION</div>
+  <div class="dev-row">
+    <label>Dungeon</label>
+    <input type="number" id="dev-dungeon" value="1" min="1" max="10">
+    <label>Wave</label>
+    <input type="number" id="dev-wave" value="1" min="1" max="6">
+    <button onclick="devJump()">Jump</button>
+  </div>
+  <div style="color:var(--muted);font-size:0.65rem;margin-top:4px;">Wave 6 = Boss Fight</div>
+
+  <div class="dev-section">PLAYER STATS</div>
+  <div class="dev-grid">
+    <label>Max HP</label>
+    <input type="number" id="dev-maxhp" value="30" min="1" max="999">
+    <label>Current HP</label>
+    <input type="number" id="dev-hp" value="30" min="1" max="999">
+    <label>Shield</label>
+    <input type="number" id="dev-shield" value="0" min="0" max="999">
+    <label>Energy/Turn</label>
+    <input type="number" id="dev-ept" value="3" min="1" max="20">
+  </div>
+
+  <div class="dev-section">DICE UPGRADES</div>
+  <div class="dev-grid" id="dev-dice-grid">
+    <!-- populated by devRefresh() -->
+  </div>
+
+  <div class="dev-section">DIE ASSIGNMENTS</div>
+  <div id="dev-assign-grid">
+    <!-- populated by devRefresh() -->
+  </div>
+
+  <div class="dev-section">SPECIAL ABILITY LEVELS</div>
+  <div class="dev-grid" id="dev-ability-grid">
+    <!-- populated by devRefresh() -->
+  </div>
+
+  <button class="dev-apply" onclick="devApplyStats()">✓ Apply Stats</button>
+  <button style="margin-top:4px;width:100%;font-size:0.68rem;" onclick="devRefresh()">↺ Refresh from game</button>
+</details>
+
 <script>
 // ─── Constants ───────────────────────────────────────────────────────────────
 const DICE      = ['d4','d6','d8','d10','d12','d20','d100'];
@@ -752,85 +842,253 @@ const ABILITY_DESCS = {
   Thorns: 'Reflects damage when hit.',
 };
 
-// ─── Enemy definitions ───────────────────────────────────────────────────────
-const ENEMY_DEFS = {
-  Rat: {
-    power: 1, hp: 10, minWave: 1,
-    actions: [{ die: 'd4', type: 'physical', label: 'd4 Physical' }],
-  },
-  Goblin: {
-    power: 2, hp: 18, minWave: 2,
-    actions: [{ die: 'd6', type: 'physical', label: 'd6 Physical' }],
-  },
-  Troll: {
-    power: 4, hp: 30, minWave: 4,
-    actions: [{ die: 'd8', type: 'physical', label: 'd8 Physical' }],
-  },
-};
+// ===== GAME CONTENT ============================================================
+// To add a new enemy: add an entry to ENEMY_DB.
+// To add a new boss:  add an entry to BOSS_DB.
+// To add a new biome: add an entry to BIOMES and populate the DBs.
+// No combat engine code needs to change for standard content additions.
+// ==============================================================================
 
-const DIE_SIDES = { d4: 4, d6: 6, d8: 8, d10: 10, d12: 12, d20: 20, d100: 100 };
+// ─── Biomes ──────────────────────────────────────────────────────────────────
+const BIOMES = [
+  {
+    name:         'Forest',
+    dungeonCount: 4,           // how many dungeons before this biome ends
+    waveCount:    5,           // combat waves before the boss
+  },
+  // Future biomes go here:
+  // { name: 'Jungle', dungeonCount: 4, waveCount: 5 },
+];
+
+// ─── Enemy database ──────────────────────────────────────────────────────────
+// Each entry is self-contained. The engine reads `abilities` at runtime.
+// ability types: 'physical' | 'piercing' | 'poison' | 'heal' | 'rage'
+const ENEMY_DB = [
+
+  // ===== FOREST ENEMIES =====
+  {
+    name:       'Rat',
+    biome:      'Forest',
+    powerLevel: 1,
+    minDungeon: 1,
+    minWave:    1,
+    hp:         6,
+    abilities: [
+      { type: 'damage', die: 'd4' },
+    ],
+  },
+  {
+    name:       'Goblin',
+    biome:      'Forest',
+    powerLevel: 2,
+    minDungeon: 1,
+    minWave:    1,
+    hp:         12,
+    abilities: [
+      { type: 'damage', die: 'd6' },
+    ],
+  },
+  {
+    name:       'Goblin Archer',
+    biome:      'Forest',
+    powerLevel: 3,
+    minDungeon: 2,
+    minWave:    1,
+    hp:         10,
+    abilities: [
+      { type: 'piercing', die: 'd6' },
+    ],
+  },
+  {
+    name:       'Stirge',
+    biome:      'Forest',
+    powerLevel: 3,
+    minDungeon: 3,
+    minWave:    1,
+    hp:         5,
+    abilities: [
+      { type: 'poison', die: 'd8' },
+    ],
+  },
+  {
+    name:       'Troll',
+    biome:      'Forest',
+    powerLevel: 4,
+    minDungeon: 1,
+    minWave:    4,
+    hp:         30,
+    abilities: [
+      { type: 'damage', die: 'd8' },
+    ],
+  },
+
+  // Future biomes go here — no engine changes needed:
+  // { name: 'Snake', biome: 'Jungle', powerLevel: 2, minDungeon: 1, minWave: 1,
+  //   hp: 12, abilities: [{ type: 'poison', die: 'd6' }] },
+];
+
+// ─── Boss database ───────────────────────────────────────────────────────────
+// behaviour:
+//   'alternating'  — cycles abilities in order each turn
+//   'random'       — picks a random ability each turn
+//   'conditional'  — engine evaluates rules[] to pick ability (see pickEnemyAction)
+//   'support'      — prioritises heal/summon; never attacks directly
+//   'summoner'     — only summons; never attacks directly
+const BOSS_DB = [
+
+  // ===== FOREST BOSSES =====
+  {
+    name:      'Troll Brute',
+    biome:     'Forest',
+    dungeon:   1,
+    hp:        100,
+    behaviour: 'alternating',
+    abilities: [
+      { type: 'rage',   die: 'd6' },
+      { type: 'damage', die: 'd8' },
+    ],
+  },
+  {
+    name:      'Poison Archer',
+    biome:     'Forest',
+    dungeon:   2,
+    hp:        80,
+    behaviour: 'conditional',
+    abilities: [
+      { type: 'poison',   die: 'd6' }, // index 0: use if player not poisoned
+      { type: 'piercing', die: 'd6' }, // index 1: use if player already poisoned
+    ],
+    // rules evaluated in pickEnemyAction under 'conditional' case
+    conditionFn: 'notPoisonedFirst', // engine key: prefer poison; else piercing
+  },
+  {
+    name:      'Goblin Shaman',
+    biome:     'Forest',
+    dungeon:   3,
+    hp:        90,
+    behaviour: 'support',
+    abilities: [
+      { type: 'heal',   die: 'd8'            }, // index 0: heal allies
+      { type: 'summon', die: 'd2', target: 'Stirge' }, // index 1: summon stirges
+    ],
+    // support logic: heal lowest-HP ally if any ally < 80% HP, else summon
+    conditionFn: 'healOrSummon',
+  },
+  {
+    name:      'Goblin King',
+    biome:     'Forest',
+    dungeon:   4,
+    hp:        150,
+    behaviour: 'summoner',
+    abilities: [
+      {
+        type:       'summon',
+        die:        'd3',
+        targetPool: ['Rat', 'Goblin', 'Goblin Archer', 'Stirge', 'Troll'],
+      },
+    ],
+  },
+
+  // Future bosses go here:
+  // { name: 'Ancient Serpent', biome: 'Jungle', dungeon: 1, hp: 120,
+  //   behaviour: 'alternating',
+  //   abilities: [{ type: 'poison', die: 'd8' }, { type: 'damage', die: 'd10' }] },
+];
+
+// ===== END GAME CONTENT ========================================================
+
+// ─── Engine constants (not content) ──────────────────────────────────────────
+const DIE_SIDES = { d2: 2, d3: 3, d4: 4, d6: 6, d8: 8, d10: 10, d12: 12, d20: 20, d100: 100 };
 const DIE_COSTS = { d4: 1, d6: 2, d8: 3, d10: 4, d12: 5, d20: 6, d100: 8 };
 const DIE_KEY   = { '1':'d4', '2':'d6', '3':'d8', '4':'d10', '5':'d12', '6':'d20', '7':'d100' };
 const MAX_PIPS  = 9;
 
-// ─── Wave budget system ───────────────────────────────────────────────────────
+// ─── Content lookup helpers ──────────────────────────────────────────────────
+// Build a fast name→def map from ENEMY_DB at startup.
+const ENEMY_DEFS = Object.fromEntries(
+  ENEMY_DB.map(e => [e.name, {
+    power:   e.powerLevel,
+    hp:      e.hp,
+    minWave: e.minWave,
+    // Convert flat ability list to the internal action format the engine uses.
+    actions: e.abilities.map(a => ({
+      die:    a.die,
+      type:   a.type,         // engine normalises 'physical' → 'damage'
+      target: a.target || null,
+      targetPool: a.targetPool || null,
+      count:  a.count  || null,
+      label:  a.die ? `${a.die} ${cap0(a.type)}` : cap0(a.type),
+    })),
+  }])
+);
+
+function cap0(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+// Return the boss def for the current biome + dungeon number.
+function getBossDef(biomeName) {
+  // Prefer exact dungeon match; fall back to last boss in biome
+  const biome = BOSS_DB.filter(b => b.biome === biomeName);
+  return biome.find(b => b.dungeon === dungeonNum)
+      || biome[biome.length - 1]
+      || BOSS_DB[0];
+}
+
+// Return the current biome def.
+function getCurrentBiome() {
+  return BIOMES[0]; // single biome for now; extend when biomes cycle
+}
+
+// ─── Wave budget & generation (data-driven) ───────────────────────────────────
 function waveBudget(n) {
-  if (n <= 5) return n + 1;   // wave1=2, wave2=3, wave3=4, wave4=5, wave5=6
-  return 6 + (n - 5);         // wave6=7, wave7=8, …
+  if (n <= 5) return n + 1;  // wave1=2, wave2=3 … wave5=6
+  return 6 + (n - 5);        // wave6=7, wave7=8 …
 }
 
 function maxEnemyPower(n) {
-  if (n <= 1) return 1;
-  if (n <= 3) return 2;
-  return 4;                   // wave4+ no practical cap (4 covers Troll)
+  if (n <= 1) return 1;  // wave 1: rats only
+  if (n <= 2) return 2;  // wave 2-3: goblins + rats
+  return 99;             // wave 3+: all eligible enemies (filtered by minDungeon)
 }
 
-function getWaveEnemies(n) {
-  const budget   = waveBudget(n);
-  const maxPower = maxEnemyPower(n);
+function getWaveEnemies(waveN, biomeName, dungeonN) {
+  const budget   = waveBudget(waveN);
+  const maxPower = maxEnemyPower(waveN);
 
-  // Build eligible pool: minWave met AND power within wave cap
-  const pool = Object.entries(ENEMY_DEFS)
-    .filter(([, def]) => n >= def.minWave && def.power <= maxPower)
-    .map(([name, def]) => ({ name, power: def.power }));
+  // Filter enemy DB: must match biome, minDungeon, minWave, and power cap
+  const pool = ENEMY_DB
+    .filter(e =>
+      e.biome      === biomeName  &&
+      dungeonN     >= e.minDungeon &&
+      waveN        >= e.minWave    &&
+      e.powerLevel <= maxPower
+    )
+    .map(e => ({ name: e.name, power: e.powerLevel }));
 
-  if (!pool.length) return ['Rat']; // fallback
+  if (!pool.length) return [ENEMY_DB.find(e => e.biome === biomeName)?.name || 'Rat'];
 
-  // Sort pool cheapest-first so preference logic can favour weaker fillers
   pool.sort((a, b) => a.power - b.power);
   const cheapestPower = pool[0].power;
-
   const result = [];
   let spent = 0;
 
   while (spent < budget) {
     const remaining = budget - spent;
-
-    // Eligible this step: power fits within remaining budget exactly,
-    // OR if only a more-expensive enemy is left and we've placed ≥1 enemy
-    // already, skip to avoid single-enemy wave bloat.
-    const exact    = pool.filter(e => e.power <= remaining);
-    const withOver = pool.filter(e => e.power <= remaining + 1);
+    const exact     = pool.filter(e => e.power <= remaining);
+    const withOver  = pool.filter(e => e.power <= remaining + 1);
 
     let candidates;
     if (exact.length) {
       candidates = exact;
     } else if (withOver.length && result.length === 0) {
-      // Nothing fits exactly and wave is empty — take cheapest overrun
       candidates = [withOver[0]];
     } else {
-      break; // remaining budget too small and wave has enemies already
+      break;
     }
 
-    // Prefer NOT using an enemy whose power equals the full remaining budget
-    // when a cheaper option exists — this keeps groups multi-enemy.
+    // Prefer cheaper enemies to keep groups multi-enemy
     const cheaper = candidates.filter(e => e.power < remaining);
-    const pick    = (cheaper.length > 0 && remaining > cheapestPower)
-      ? cheaper
-      : candidates;
-
-    // Uniform random from pick set
-    const chosen = pick[Math.floor(Math.random() * pick.length)];
+    const pick    = (cheaper.length > 0 && remaining > cheapestPower) ? cheaper : candidates;
+    const chosen  = pick[Math.floor(Math.random() * pick.length)];
     result.push(chosen.name);
     spent += chosen.power;
   }
@@ -838,16 +1096,15 @@ function getWaveEnemies(n) {
   return result;
 }
 
-// HP/ATK scaling: wave-based + dungeon multiplier
-function enemyScaling(waveNum) {
-  const c = Math.max(0, waveNum - 1 - 3);
-  // Dungeon scaling: +15% HP and +10% ATK per dungeon beyond 1
+// ─── Scaling (dungeon-aware, biome-agnostic) ─────────────────────────────────
+function enemyScaling(waveN) {
+  const c = Math.max(0, waveN - 1 - 3);
   const d = Math.max(0, dungeonNum - 1);
   return {
-    hpMult:   1 + d * 0.15,      // applied to base hp in startWave
+    hpMult:   1 + d * 0.15,
     hpBonus:  c,
     atkBonus: Math.floor(c / 2),
-    atkMult:  1 + d * 0.10,       // used in doEnemyAction
+    atkMult:  1 + d * 0.10,
   };
 }
 
@@ -857,7 +1114,7 @@ let rage, thorns, enemyPoison, playerPoison;
 let autoEndTimer = null;
 let assignments, phase, enemyTurnLocked;
 let waveNum, waveEnemies, enemies, selectedTarget;
-let dungeonNum, bossRage, bossActionIndex;
+let dungeonNum, bossActionIndex;
 let unlockedDiceTiers; // set of die names available as rewards
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -1023,7 +1280,6 @@ function startNextDungeon() {
   // Preserve energy/upgrades, reset wave
   waveNum  = 0;
   enemies  = [];
-  bossRage = 0;
   bossActionIndex = 0;
   rage     = 0;
   thorns   = 0;
@@ -1060,7 +1316,6 @@ function init() {
   enemies        = [];
   selectedTarget = null;
   dungeonNum        = 1;
-  bossRage          = 0;
   bossActionIndex   = 0;
   unlockedDiceTiers = new Set(['d4','d6','d8']); // d10+ unlocked by clearing dungeons
 
@@ -1084,6 +1339,7 @@ function init() {
   buildAssignUI();
   clearLog();
   addLog('Assign your dice abilities to begin.', 'muted');
+  devRefresh();
 }
 
 // ─── Wave / Enemy ─────────────────────────────────────────────────────────────
@@ -1091,12 +1347,13 @@ function startWave(n) {
   waveNum     = n;
   const scale = enemyScaling(n);
   if (n > 5) { startBossFight(); return; } // wave 6 = boss
-  waveEnemies = getWaveEnemies(n);
+  const biome = getCurrentBiome();
+  waveEnemies = getWaveEnemies(n, biome.name, dungeonNum);
   enemies = waveEnemies.map((name, idx) => {
     const def = ENEMY_DEFS[name];
     const hp  = Math.round((def.hp + scale.hpBonus * def.power) * scale.hpMult);
     return { id: idx, name, hp, currentHp: hp, actions: def.actions,
-             atkBonus: scale.atkBonus, atkMult: scale.atkMult, poison: 0 };
+             atkBonus: scale.atkBonus, atkMult: scale.atkMult, poison: 0, rage: 0 };
   });
   addLog(`━━ Wave ${waveNum} begins! ━━`, 'system');
   enemies.forEach(e => {
@@ -1111,22 +1368,33 @@ function startWave(n) {
 }
 
 function startBossFight() {
+  const biome  = getCurrentBiome();
+  const bossDef = getBossDef(biome.name);
   const scale  = enemyScaling(5);
-  const baseHp = 100;
-  const hp     = Math.round(baseHp * scale.hpMult);
-  bossRage        = 0;
+  const hp     = Math.round(bossDef.hp * scale.hpMult);
   bossActionIndex = 0;
+  // Convert boss ability list to internal action format
+  const actions = bossDef.abilities.map(a => ({
+    die:        a.die,
+    type:       a.type,
+    label:      a.die ? `${a.die} ${cap(a.type)}` : cap(a.type),
+    target:     a.target     || null,
+    targetPool: a.targetPool || null,
+    count:      a.count      || null,
+  }));
   enemies = [{
-    id: 0, name: 'Troll King', hp, currentHp: hp, isBoss: true,
-    actions: [{ die: 'd6', type: 'rage', label: 'd6 Rage' },
-              { die: 'd8', type: 'physical', label: 'd8 Physical' }],
-    atkBonus: scale.atkBonus, atkMult: scale.atkMult, poison: 0,
+    id: 0, name: bossDef.name, hp, currentHp: hp, isBoss: true,
+    behaviour: bossDef.behaviour,
+    actions,
+    atkBonus: scale.atkBonus, atkMult: scale.atkMult, poison: 0, rage: 0,
   }];
   document.getElementById('wave-label-text').innerHTML =
     '<strong style="color:var(--accent)">BOSS FIGHT</strong>';
   document.getElementById('wave-bar').style.display = '';
-  addLog(`━━ BOSS: The Troll King awakens! (${hp} HP) ━━`, 'system');
-  addLog(`Pattern: Rage → Attack → Rage → Attack …`, 'system');
+  // Build pattern description from ability list
+  const pattern = actions.map(a => cap(a.type)).join(' → ') + ' → …';
+  addLog(`━━ BOSS: ${bossDef.name} awakens! (${hp} HP) ━━`, 'system');
+  addLog(`Pattern: ${pattern}`, 'system');
   renderEnemies();
   document.getElementById('enemies-container').style.display = 'flex';
 }
@@ -1154,7 +1422,7 @@ function renderEnemies() {
       ? e.actions.map(a => `${a.die}+${e.atkBonus}`).join('/')
       : e.actions.map(a => a.die).join('/');
     const poisonLine = e.poison > 0 ? `<div class="ec-poison">☠ Poison ${e.poison}</div>` : '';
-    const bossRageLine = e.isBoss && bossRage > 0 ? `<div class="boss-rage-note">⚔️ Rage stored: ${bossRage}</div>` : '';
+    const bossRageLine = e.rage > 0 ? `<div class="boss-rage-note">⚔️ Rage: ${e.rage}</div>` : '';
     card.innerHTML = `
       <div class="ec-name">${e.name}</div>
       <div class="ec-hp">${e.currentHp} / ${e.hp} HP</div>
@@ -1211,7 +1479,6 @@ function startCombat() {
   phase      = 'combat';
   energy     = 0;
   dungeonNum = 1;
-  bossRage   = 0;
   bossActionIndex = 0;
   document.getElementById('dungeon-num').textContent = dungeonNum;
   startWave(1);
@@ -1431,76 +1698,155 @@ function runEnemyTurns(queue, idx) {
   }, 400);
 }
 
-function doEnemyAction(e, done) {
-  // Boss alternates: even index=Rage(0), odd index=Attack(1)
-  let action;
-  if (e.isBoss) {
-    action = e.actions[bossActionIndex % 2];
-    bossActionIndex++;
-  } else {
-    action = e.actions[Math.floor(Math.random() * e.actions.length)];
-  }
-  const bonus    = e.atkBonus || 0;
-  const baseRoll = roll(action.die);
-  const mult     = e.atkMult || 1;
-  let   dmg      = Math.round((baseRoll + bonus) * mult);
-  const dieLabel = bonus > 0 ? `${action.die}+${bonus}` : action.die;
+// ─── Generic enemy ability dispatcher ────────────────────────────────────────
+// Reads action.type from enemy data. No enemy-specific logic lives here.
+// Supported types: damage | piercing | poison | heal | shield | rage | thorns | summon
+// 'physical' is accepted as an alias for 'damage' for backwards compatibility.
 
-  // Boss Rage action: store rage for next attack
-  if (action.type === 'rage') {
-    bossRage = baseRoll;
-    addLog(`Troll King rolled Rage ${baseRoll}. Next attack will deal +${bossRage} bonus damage!`, 'rage-log');
+function pickEnemyAction(e) {
+  if (e.behaviour === 'alternating') {
+    const action = e.actions[bossActionIndex % e.actions.length];
+    bossActionIndex++;
+    return action;
+  }
+
+  if (e.behaviour === 'conditional') {
+    // conditionFn keys map to inline logic
+    if (e.conditionFn === 'notPoisonedFirst') {
+      // abilities[0]=poison, abilities[1]=piercing
+      // Use poison if player not already poisoned; otherwise piercing
+      return playerPoison > 0 ? e.actions[1] : e.actions[0];
+    }
+    // Unknown condition: random
+    return e.actions[Math.floor(Math.random() * e.actions.length)];
+  }
+
+  if (e.behaviour === 'support') {
+    if (e.conditionFn === 'healOrSummon') {
+      // Heal if any living ally (including self) is below 80% HP
+      const needsHeal = livingEnemies().some(a => a.currentHp < a.hp * 0.8);
+      return needsHeal ? e.actions[0] : e.actions[1];
+    }
+    // Default support: cycle heal → summon
+    const action = e.actions[bossActionIndex % e.actions.length];
+    bossActionIndex++;
+    return action;
+  }
+
+  if (e.behaviour === 'summoner') {
+    // Always summon — pick first summon ability
+    return e.actions.find(a => a.type === 'summon') || e.actions[0];
+  }
+
+  // Default: random
+  return e.actions[Math.floor(Math.random() * e.actions.length)];
+}
+
+function doEnemyAction(e, done) {
+  const action   = pickEnemyAction(e);
+  const bonus    = e.atkBonus || 0;
+  const baseRoll = action.die ? roll(action.die) : 0;
+  const mult     = e.atkMult  || 1;
+  const dieLabel = bonus > 0 ? `${action.die}+${bonus}` : (action.die || '');
+
+  // Normalise type alias
+  const type = (action.type === 'physical') ? 'damage' : action.type;
+
+  // ── RAGE: store on the enemy; next damaging hit adds it ──────────────────
+  if (type === 'rage') {
+    e.rage = baseRoll;
+    addLog(`${e.name} channels Rage ${baseRoll}. Next attack +${e.rage}!`, 'rage-log');
     renderEnemies();
     done(); return;
   }
 
-  // Physical attack: add stored boss rage
-  if (action.type === 'physical' && e.isBoss && bossRage > 0) {
-    const totalDmg = dmg + bossRage;
-    addLog(`Troll King attacks for ${dmg} + ${bossRage} Rage = ${totalDmg} damage.`, 'dmg');
-    dmg = totalDmg;
-    bossRage = 0;
-    renderEnemies();
-  }
-
-  // Heal action
-  if (action.type === 'heal') {
+  // ── HEAL ─────────────────────────────────────────────────────────────────
+  if (type === 'heal') {
     clearEnemyPoison(e, `Healing removes ${e.name}'s Poison!`);
     const before = e.currentHp;
-    e.currentHp = Math.min(e.hp, e.currentHp + dmg);
-    const healed = e.currentHp - before;
-    addLog(`${e.name} uses ${dieLabel} — heals for ${healed}. (${e.currentHp}/${e.hp} HP)`, 'dmg-heal-enemy');
+    e.currentHp  = Math.min(e.hp, e.currentHp + baseRoll);
+    addLog(`${e.name} heals for ${e.currentHp - before}. (${e.currentHp}/${e.hp} HP)`, 'dmg-heal-enemy');
     renderEnemies();
     done(); return;
   }
 
-  // Offensive
-  const typeLabel = cap(action.type);
-  const rollDesc  = bonus > 0
-    ? `${e.name} rolled ${baseRoll} + ${bonus} = ${dmg} ${typeLabel} Damage.`
-    : `${e.name} rolled ${dieLabel} — ${dmg} ${typeLabel} Damage.`;
-  const logClass = action.type === 'piercing' ? 'piercing' : action.type === 'poison' ? 'poison-log' : 'dmg';
+  // ── SHIELD (enemy gains shield — stored as e.shield) ─────────────────────
+  if (type === 'shield') {
+    e.shield = Math.min((e.shield || 0) + baseRoll, e.hp);
+    addLog(`${e.name} raises shield for ${baseRoll}. (Shield: ${e.shield})`, 'shield-log');
+    renderEnemies();
+    done(); return;
+  }
+
+  // ── SUMMON ────────────────────────────────────────────────────────────────
+  if (type === 'summon') {
+    const count   = action.die ? baseRoll : (action.count || 1);
+    const pool    = action.targetPool || (action.target ? [action.target] : []);
+    const spawned = [];
+    const MAX_ENEMIES = 6;
+    for (let i = 0; i < count && livingEnemies().length < MAX_ENEMIES; i++) {
+      const name = pool[Math.floor(Math.random() * pool.length)];
+      const def  = ENEMY_DEFS[name];
+      if (!def) continue;
+      const scale = enemyScaling(waveNum);
+      const hp    = Math.round(def.hp * scale.hpMult);
+      const newE  = { id: Date.now() + i, name, hp, currentHp: hp,
+                      actions: def.actions, atkBonus: scale.atkBonus,
+                      atkMult: scale.atkMult, poison: 0, rage: 0 };
+      enemies.push(newE);
+      spawned.push(name);
+    }
+    if (spawned.length)
+      addLog(`${e.name} summons: ${spawned.join(', ')}!`, 'system');
+    else
+      addLog(`${e.name} tries to summon but the battlefield is full!`, 'muted');
+    renderEnemies();
+    done(); return;
+  }
+
+  // ── OFFENSIVE: damage, piercing, poison ───────────────────────────────────
+  // Apply stored rage bonus to this hit
+  let rawDmg = Math.round((baseRoll + bonus) * mult);
+  if (e.rage > 0 && (type === 'damage' || type === 'piercing' || type === 'poison')) {
+    const rageAmt = e.rage;
+    addLog(`${e.name} attacks with ${rageAmt} Rage stored!`, 'rage-log');
+    rawDmg += rageAmt;
+    e.rage = 0;
+  }
+  const dmg = rawDmg;
+
+  const logClass = type === 'piercing' ? 'piercing' : type === 'poison' ? 'poison-log' : 'dmg';
+  const rollDesc = bonus > 0
+    ? `${e.name} rolled ${baseRoll} + ${bonus} = ${dmg} ${cap(type)} Damage.`
+    : `${e.name} rolled ${dieLabel} — ${dmg} ${cap(type)} Damage.`;
   addLog(rollDesc, logClass);
 
-  if (action.type === 'poison') {
+  if (type === 'poison') {
+    // Poison: immediate damage + DOT, ignores shield
     applyPoisonToPlayer(dmg);
-    if (player.hp <= 0) { done(); return; }
+    if (player.hp <= 0) { updatePlayerUI(); done(); return; }
+
   } else {
+    // damage or piercing — apply shield interaction
     let hpDmg = dmg;
-    if (action.type === 'physical') {
+    if (type === 'damage') {
+      // Enemy shield (if any) doesn't apply here — this is damage TO player
       if (shield > 0) {
-        const blocked = Math.min(shield, dmg); hpDmg = dmg - blocked; shield -= blocked;
+        const blocked = Math.min(shield, dmg);
+        hpDmg = dmg - blocked;
+        shield -= blocked;
         addLog(`Shield absorbs ${blocked}.${hpDmg > 0 ? ` ${hpDmg} gets through.` : ' All blocked!'}`, 'shield-log');
         updateShieldUI();
       }
-    } else if (action.type === 'piercing') {
-      if (shield > 0) {
-        const shieldAmt = Math.floor(dmg / 2);
-        const bypassAmt = dmg - shieldAmt;
-        const actualBlock = Math.min(shield, shieldAmt);
-        shield -= actualBlock;
-        hpDmg = (shieldAmt - actualBlock) + bypassAmt;
-        addLog(`Piercing: Shield absorbs ${actualBlock}, ${bypassAmt} bypasses shield.`, 'piercing');
+    } else if (type === 'piercing') {
+      // Attacker-favoured rounding: ceil for bypass, floor for shield
+      const bypassAmt  = Math.ceil(dmg / 2);
+      const shieldAmt  = dmg - bypassAmt;
+      const actualBlock = Math.min(shield, shieldAmt);
+      shield -= actualBlock;
+      hpDmg  = (shieldAmt - actualBlock) + bypassAmt;
+      if (actualBlock > 0 || shieldAmt > 0) {
+        addLog(`Piercing: Shield absorbs ${actualBlock}, ${bypassAmt} bypasses.`, 'piercing');
         updateShieldUI();
       }
     }
@@ -1510,11 +1856,11 @@ function doEnemyAction(e, done) {
     }
   }
 
-  // Thorns reflect
+  // ── Thorns reflect (all offensive types) ─────────────────────────────────
   if (thorns > 0) {
     const reflected = Math.min(thorns, dmg);
-    e.currentHp = Math.max(0, e.currentHp - reflected);
-    thorns -= reflected;
+    e.currentHp     = Math.max(0, e.currentHp - reflected);
+    thorns         -= reflected;
     addLog(`🌿 Thorns reflect ${reflected} to ${e.name}. (${e.currentHp}/${e.hp} HP) Thorns: ${thorns}`, 'thorns-log');
     updateThornsUI(); renderEnemies();
   }
@@ -1525,98 +1871,6 @@ function doEnemyAction(e, done) {
 
 function enemyAttack() {
   runEnemyTurns(livingEnemies().slice(), 0);
-}
-function _unused_enemyAttack_legacy() {
-  const action   = enemy.actions[Math.floor(Math.random() * enemy.actions.length)];
-  const bonus    = enemy.atkBonus || 0;
-  const baseRoll = roll(action.die);
-  const dmg      = baseRoll + bonus;
-  const dieLabel = bonus > 0 ? `${action.die}+${bonus}` : action.die;
-
-  // Heal action
-  if (action.type === 'heal') {
-    clearEnemyPoison(`Healing removes ${enemy.name}'s Poison!`);
-    const before = enemy.currentHp;
-    enemy.currentHp = Math.min(enemy.hp, enemy.currentHp + dmg);
-    const healed = enemy.currentHp - before;
-    addLog(`${enemy.name} uses ${dieLabel} — heals for ${healed}. (${enemy.currentHp}/${enemy.hp} HP)`, 'dmg-heal-enemy');
-    updateEnemyUI();
-    afterEnemyTurn();
-    return;
-  }
-
-  // Log attack
-  const typeLabel = cap(action.type);
-  const rollDesc  = bonus > 0
-    ? `${enemy.name} rolled ${baseRoll} + ${bonus} = ${dmg} ${typeLabel} Damage.`
-    : `${enemy.name} rolled ${dieLabel} — ${dmg} ${typeLabel} Damage.`;
-  const logClass  = action.type === 'piercing' ? 'piercing' : action.type === 'poison' ? 'poison-log' : 'dmg';
-  addLog(rollDesc, logClass);
-
-  // Poison attack: apply via helper (immediate + store), then end turn
-  if (action.type === 'poison') {
-    applyPoisonToPlayer(dmg);
-    if (player.hp <= 0) { addLog('You succumb to poison...', 'system'); setTimeout(showGameOver, 400); return; }
-    if (thorns > 0) {
-      const reflected = Math.min(thorns, dmg);
-      enemy.currentHp = Math.max(0, enemy.currentHp - reflected);
-      thorns -= reflected;
-      addLog(`🌿 Thorns reflect ${reflected} to ${enemy.name}. (${enemy.currentHp}/${enemy.hp} HP) Thorns: ${thorns}`, 'thorns-log');
-      updateThornsUI(); updateEnemyUI();
-      if (enemy.currentHp <= 0) { addLog(`${enemy.name} is destroyed by Thorns!`, 'system'); setTimeout(onEnemyDefeated, 400); return; }
-    }
-    afterEnemyTurn(); return;
-  }
-
-  // Physical / Piercing — apply shield interaction
-  let hpDmg = dmg;
-  if (action.type === 'physical') {
-    if (shield > 0) {
-      const blocked = Math.min(shield, dmg); hpDmg = dmg - blocked; shield -= blocked;
-      addLog(`Shield absorbs ${blocked}.${hpDmg > 0 ? ` ${hpDmg} gets through.` : ' All blocked!'}`, 'shield-log');
-      updateShieldUI();
-    }
-  } else if (action.type === 'piercing') {
-    if (shield > 0) {
-      const shieldAmt = Math.floor(dmg / 2);
-      const bypassAmt = dmg - shieldAmt;
-      const actualBlock = Math.min(shield, shieldAmt);
-      shield -= actualBlock;
-      hpDmg = (shieldAmt - actualBlock) + bypassAmt;
-      addLog(`Piercing: Shield absorbs ${actualBlock}, ${bypassAmt} bypasses shield.`, 'piercing');
-      updateShieldUI();
-    }
-  }
-
-  if (hpDmg > 0) {
-    player.hp = Math.max(0, player.hp - hpDmg);
-    addLog(`You take ${hpDmg} damage. (HP: ${player.hp}/${player.maxHp})`, 'dmg');
-  }
-
-  // Thorns reflect
-  if (thorns > 0) {
-    const reflected = Math.min(thorns, dmg);
-    enemy.currentHp = Math.max(0, enemy.currentHp - reflected);
-    thorns -= reflected;
-    addLog(`🌿 Thorns reflect ${reflected} to ${enemy.name}. (${enemy.currentHp}/${enemy.hp} HP) Thorns: ${thorns}`, 'thorns-log');
-    updateThornsUI(); updateEnemyUI();
-    if (enemy.currentHp <= 0) { updatePlayerUI(); addLog(`${enemy.name} is destroyed by Thorns!`, 'system'); setTimeout(onEnemyDefeated, 400); return; }
-  }
-
-  updatePlayerUI();
-  if (player.hp <= 0) { addLog('You have been defeated...', 'system'); setTimeout(showGameOver, 400); return; }
-  afterEnemyTurn();
-}
-function onEnemyDefeated() {
-  enemyIndex++;
-  if (enemyIndex >= waveEnemies.length) {
-    addLog(`━━ Wave ${waveNum} complete! ━━`, 'system');
-    hide('combat-panel');
-    hide('enemy-block');
-    showReward();
-  } else {
-    setTimeout(() => { spawnEnemy(); startPlayerTurn(true); }, 500);
-  }
 }
 
 function endTurn() {
@@ -1751,7 +2005,7 @@ function showAbilityDiePick(chosenAbility) {
   const opts = document.getElementById('ability-die-pick-options');
   opts.innerHTML = '';
 
-  DICE.forEach(die => {
+  DICE.filter(die => unlockedDiceTiers.has(die)).forEach(die => {
     const u          = dieUpgrades[die];
     const curAbility = assignments[die];
     const btn = document.createElement('button');
@@ -1890,6 +2144,184 @@ document.addEventListener('keydown', e => {
   if (!assignments[die]) return;
   playerAction(die);
 });
+
+// ─── Dev tools ───────────────────────────────────────────────────────────────
+
+function devRefresh() {
+  // Sync inputs from current game state
+  if (player) {
+    document.getElementById('dev-maxhp').value  = player.maxHp;
+    document.getElementById('dev-hp').value     = player.hp;
+    document.getElementById('dev-shield').value = shield;
+    document.getElementById('dev-ept').value    = energyPerTurn;
+  }
+
+  // Dice upgrade inputs
+  const diceGrid = document.getElementById('dev-dice-grid');
+  diceGrid.innerHTML = '';
+  DICE.forEach(die => {
+    const lbl = document.createElement('label');
+    lbl.textContent = die + ' +';
+    const inp = document.createElement('input');
+    inp.type = 'number'; inp.min = 0; inp.max = 20;
+    inp.value = (dieUpgrades && dieUpgrades[die] !== undefined) ? dieUpgrades[die] : 0;
+    inp.dataset.die = die;
+    inp.id = 'dev-upgrade-' + die;
+    diceGrid.appendChild(lbl);
+    diceGrid.appendChild(inp);
+  });
+
+  // Die assignment selects
+  const assignGrid = document.getElementById('dev-assign-grid');
+  assignGrid.innerHTML = '';
+  const allAbilities = [...(typeof ABILITIES !== 'undefined' ? ABILITIES : []),
+                        ...(typeof SPECIAL_ABILITIES !== 'undefined' ? SPECIAL_ABILITIES : [])];
+  DICE.forEach(die => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:4px;';
+    const lbl = document.createElement('label');
+    lbl.textContent = die;
+    lbl.style.cssText = 'width:36px;color:var(--muted);font-size:0.65rem;flex-shrink:0;';
+    const sel = document.createElement('select');
+    sel.id = 'dev-assign-' + die;
+    sel.style.cssText = 'flex:1;';
+    const noneOpt = document.createElement('option');
+    noneOpt.value = ''; noneOpt.textContent = '— unassigned —';
+    sel.appendChild(noneOpt);
+    allAbilities.forEach(ab => {
+      const opt = document.createElement('option');
+      opt.value = ab; opt.textContent = ab;
+      if (assignments && assignments[die] === ab) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    row.appendChild(lbl);
+    row.appendChild(sel);
+    assignGrid.appendChild(row);
+  });
+
+  // Special ability levels
+  const abGrid = document.getElementById('dev-ability-grid');
+  abGrid.innerHTML = '';
+  const specials = typeof SPECIAL_ABILITIES !== 'undefined' ? SPECIAL_ABILITIES : [];
+  specials.forEach(ab => {
+    const lbl = document.createElement('label');
+    lbl.textContent = ab;
+    const inp = document.createElement('input');
+    inp.type = 'number'; inp.min = 0; inp.max = 5;
+    inp.value = (abilityLevels && abilityLevels[ab]) ? abilityLevels[ab] : 0;
+    inp.id = 'dev-ablevel-' + ab;
+    abGrid.appendChild(lbl);
+    abGrid.appendChild(inp);
+  });
+}
+
+function devApplyStats() {
+  // HP / shield / energy
+  const newMaxHp = parseInt(document.getElementById('dev-maxhp').value) || player.maxHp;
+  player.maxHp   = newMaxHp;
+  player.hp      = Math.min(parseInt(document.getElementById('dev-hp').value) || player.hp, newMaxHp);
+  shield         = Math.min(parseInt(document.getElementById('dev-shield').value) || 0, newMaxHp);
+  energyPerTurn  = parseInt(document.getElementById('dev-ept').value) || energyPerTurn;
+
+  // Die upgrades
+  DICE.forEach(die => {
+    const inp = document.getElementById('dev-upgrade-' + die);
+    if (inp) dieUpgrades[die] = parseInt(inp.value) || 0;
+  });
+
+  // Assignments
+  const allAbilities = [...ABILITIES, ...SPECIAL_ABILITIES];
+  DICE.forEach(die => {
+    const sel = document.getElementById('dev-assign-' + die);
+    if (sel) {
+      if (sel.value) assignments[die] = sel.value;
+      else delete assignments[die];
+    }
+  });
+
+  // Special ability levels — also unlock assigned special abilities
+  SPECIAL_ABILITIES.forEach(ab => {
+    const inp = document.getElementById('dev-ablevel-' + ab);
+    if (!inp) return;
+    const lvl = parseInt(inp.value) || 0;
+    if (lvl > 0) abilityLevels[ab] = lvl;
+    else delete abilityLevels[ab];
+  });
+
+  // Unlock die tiers for any assigned dice
+  DICE.forEach(die => {
+    if (assignments[die]) unlockedDiceTiers.add(die);
+  });
+
+  // Refresh all UI
+  updatePlayerUI();
+  updateShieldUI();
+  updateEnergyPerTurnUI();
+  updateRageUI();
+  updateThornsUI();
+  updatePlayerPoisonUI();
+  if (phase === 'combat') buildDiceButtons();
+  addLog('DEV: Stats applied.', 'muted');
+}
+
+function devJump() {
+  const targetDungeon = parseInt(document.getElementById('dev-dungeon').value) || 1;
+  const targetWave    = parseInt(document.getElementById('dev-wave').value)    || 1;
+
+  // Reset to a clean mid-run state (keep assignments if already set)
+  player        = { hp: 30, maxHp: 30 };
+  shield        = 0;
+  energy        = 0;
+  energyPerTurn = 3;
+  if (!dieUpgrades) dieUpgrades = { d4:0, d6:0, d8:0, d10:0, d12:0, d20:0, d100:0 };
+  if (!abilityLevels) abilityLevels = {};
+  rage = 0; thorns = 0; playerPoison = 0; enemyPoison = 0;
+  bossActionIndex = 0;
+  dungeonNum = targetDungeon;
+  waveNum    = 0;
+  enemies    = [];
+  phase      = 'combat';
+  enemyTurnLocked = false;
+  unlockedDiceTiers = new Set(['d4','d6','d8']);
+  // Unlock tiers for dungeons already passed
+  const unlockMap = { 1:'d10', 2:'d12', 3:'d20', 4:'d100' };
+  for (let d = 1; d < targetDungeon; d++) {
+    if (unlockMap[d]) unlockedDiceTiers.add(unlockMap[d]);
+  }
+
+  // If assignments are empty (fresh load), auto-assign defaults so combat works
+  if (Object.keys(assignments || {}).length < 3) {
+    assignments = { d4: 'Damage', d6: 'Shield', d8: 'Heal' };
+    addLog('DEV: Auto-assigned d4=Damage, d6=Shield, d8=Heal.', 'muted');
+  }
+
+  // Hide all panels, show combat
+  hide('assign-panel');
+  hide('outcome-panel');
+  hide('reward-panel');
+  hide('die-pick-panel');
+  hide('ability-pick-panel');
+  hide('ability-die-pick-panel');
+  hide('dungeon-complete-panel');
+  show('combat-panel');
+  document.getElementById('enemies-container').style.display = 'flex';
+  document.getElementById('wave-bar').style.display = '';
+  document.getElementById('dungeon-num').textContent = dungeonNum;
+
+  updatePlayerUI();
+  updateShieldUI();
+  updateEnergyPerTurnUI();
+  updateRageUI();
+  updateThornsUI();
+  updatePoisonUI();
+  updatePlayerPoisonUI();
+  clearLog();
+  addLog(`DEV: Jumping to Dungeon ${targetDungeon}, Wave ${targetWave}.`, 'system');
+
+  energy = 0;
+  startWave(targetWave);
+  startPlayerTurn(true);
+}
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 init();
