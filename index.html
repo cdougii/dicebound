@@ -662,11 +662,11 @@
       <span class="energy-label">⚡ Energy</span>
       <span class="energy-value" id="energy-value">3</span>
       <div class="energy-pips" id="energy-pips"></div>
+      <button class="end-turn-btn" id="end-turn-btn" onclick="endTurn()" style="margin-left:auto;">End Turn [↵]</button>
     </div>
     <div class="panel-title" style="margin-bottom:10px;">Your Turn — Roll Dice or End Turn</div>
     <div class="combat-actions">
       <div class="dice-buttons" id="dice-buttons"></div>
-      <button class="end-turn-btn" id="end-turn-btn" onclick="endTurn()">End Turn ›</button>
     </div>
   </div>
 
@@ -744,6 +744,8 @@
 const DICE      = ['d4','d6','d8','d10','d12','d20','d100'];
 const ABILITIES = ['Damage','Shield','Heal'];
 const SPECIAL_ABILITIES = ['Poison','Rage','Thorns'];
+const DUNGEON_DIE_UNLOCK = { 1:'d10', 2:'d12', 3:'d20', 4:'d100' };
+
 const ABILITY_DESCS = {
   Poison: 'Deals extra damage on hit.',
   Rage:   'Bonus damage when HP is low.',
@@ -856,6 +858,7 @@ let autoEndTimer = null;
 let assignments, phase, enemyTurnLocked;
 let waveNum, waveEnemies, enemies, selectedTarget;
 let dungeonNum, bossRage, bossActionIndex;
+let unlockedDiceTiers; // set of die names available as rewards
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function roll(die) { return Math.floor(Math.random() * DIE_SIDES[die]) + 1; }
@@ -975,33 +978,28 @@ function onWaveComplete() {
 function showDungeonComplete() {
   phase = 'dungeon-complete';
   show('dungeon-complete-panel');
-  document.getElementById('dc-title').textContent = '=== DUNGEON CLEARED ===';
+  document.getElementById('dc-title').textContent = 'DUNGEON CLEARED!';
   document.getElementById('dc-sub').textContent =
-    `Dungeon ${dungeonNum} cleared! You defeated the Troll King.`;
+    `Dungeon ${dungeonNum} complete! You defeated the Troll King.`;
 
-  // Apply rewards
+  // Always grant +1 Energy per Turn
   energyPerTurn++;
-  const d10Unlocked = !DICE.includes('d10') || dieUpgrades['d10'] !== undefined;
-  let rewardText = '+1 Maximum Energy per Turn';
-  const rewards = [rewardText];
-
-  // Unlock d10 if not yet in STARTING_DICE and not already assigned
-  let d10msg = '';
-  if (!assignments['d10']) {
-    // d10 is in DICE but locked — assign it to the first die slot not yet used,
-    // OR just note it's available for next assignment phase
-    d10msg = 'd10 Die Unlocked';
-    rewards.push(d10msg);
-    // Mark d10 as unlocked by giving it a placeholder assignment token
-    if (!STARTING_DICE.includes('d10')) STARTING_DICE.push('d10');
-  }
-
-  addLog(`Dungeon ${dungeonNum} complete! Rewards: ${rewards.join(', ')}.`, 'system');
   updateEnergyPerTurnUI();
+  addLog(`Dungeon ${dungeonNum} complete! +1 Energy per Turn granted.`, 'system');
 
   const rewardsEl = document.getElementById('dc-rewards');
   rewardsEl.innerHTML = '';
-  rewards.forEach(r => {
+  const rewardLines = ['+1 Maximum Energy per Turn'];
+
+  // Unlock next die tier if applicable
+  const dieToUnlock = DUNGEON_DIE_UNLOCK[dungeonNum];
+  if (dieToUnlock && !unlockedDiceTiers.has(dieToUnlock)) {
+    unlockedDiceTiers.add(dieToUnlock);
+    rewardLines.push(`${dieToUnlock} Dice Can Now Appear in Rewards`);
+    addLog(`Unlocked: ${dieToUnlock} dice can now appear in future reward choices.`, 'crit');
+  }
+
+  rewardLines.forEach(r => {
     const tag = document.createElement('div');
     tag.className = 'dc-reward-tag';
     tag.textContent = r;
@@ -1061,9 +1059,10 @@ function init() {
   waveEnemies    = [];
   enemies        = [];
   selectedTarget = null;
-  dungeonNum     = 1;
-  bossRage       = 0;
-  bossActionIndex = 0;
+  dungeonNum        = 1;
+  bossRage          = 0;
+  bossActionIndex   = 0;
+  unlockedDiceTiers = new Set(['d4','d6','d8']); // d10+ unlocked by clearing dungeons
 
   show('assign-panel');
   hide('combat-panel');
@@ -1241,10 +1240,13 @@ function buildDiceButtons() {
     const label     = dieName(die);
     const isAssigned      = !!ab;
     const isPoisonBlocked = isAssigned && (ab === 'Poison' && livingEnemies().every(e => e.poison > 0));
+    const isHealBlocked   = isAssigned && (ab === 'Heal' && player.hp >= player.maxHp);
+    const isShieldBlocked = isAssigned && (ab === 'Shield' && shield >= shieldCap());
     const isLocked        = !isAssigned;
+    const isBlocked       = isPoisonBlocked || isHealBlocked || isShieldBlocked;
     const btn = document.createElement('button');
-    btn.className = 'die-btn' + (!isAssigned ? ' locked-die' : (!canAfford || isPoisonBlocked ? ' too-costly' : ''));
-    btn.disabled  = isLocked || !canAfford || enemyTurnLocked || isPoisonBlocked;
+    btn.className = 'die-btn' + (!isAssigned ? ' locked-die' : (!canAfford || isBlocked ? ' too-costly' : ''));
+    btn.disabled  = isLocked || !canAfford || enemyTurnLocked || isBlocked;
     const keyNum  = Object.entries(DIE_KEY).find(([k,v]) => v === die)?.[0] || '';
     const keyHint = keyNum ? `<div class="die-key">[${keyNum}]</div>` : '';
     if (isLocked) {
@@ -1252,7 +1254,10 @@ function buildDiceButtons() {
     } else {
       const abClass   = abilityCSSClass(ab);
       const abDisplay = abilityDisplayName(ab);
-      const costLabel = isPoisonBlocked ? 'All poisoned' : `Cost: ${cost} ⚡`;
+      const costLabel = isPoisonBlocked ? 'All poisoned'
+                      : isHealBlocked   ? 'Already full HP'
+                      : isShieldBlocked ? 'Shield at max'
+                      : `Cost: ${cost} ⚡`;
       btn.innerHTML = `${keyHint}<div class="die-name">${label}</div><div class="die-ability ${abClass}">${abDisplay}</div><div class="die-cost">${costLabel}</div>`;
     }
     btn.onclick = () => playerAction(die);
@@ -1383,7 +1388,9 @@ function resolvePlayerAction(die, ability, tgt) {
     const ab = assignments[d];
     if (!ab) return false;
     if (energy < DIE_COSTS[d]) return false;
-    if (ab === 'Poison' && livingEnemies().every(e => e.poison > 0)) return false;
+    if (ab === 'Poison'  && livingEnemies().every(e => e.poison > 0)) return false;
+    if (ab === 'Heal'    && player.hp >= player.maxHp) return false;
+    if (ab === 'Shield'  && shield >= shieldCap()) return false;
     return true;
   });
   if (!canStillAct) {
@@ -1633,7 +1640,13 @@ function showReward() {
   const opts = document.getElementById('reward-options');
   opts.innerHTML = '';
 
-  const thirdReward = waveNum === 1
+  // +1 Energy reward only available once (wave 1 of dungeon 1)
+  const abilityReward = {
+    title: 'New / Upgrade Ability',
+    desc:  'Learn Poison, Rage, or Thorns — or level up one you already have.',
+    fn() { hide('reward-panel'); showAbilityPick(); }
+  };
+  const thirdReward = (waveNum === 1 && dungeonNum === 1)
     ? {
         title: '+1 Energy per Turn',
         desc:  `Energy gain ${energyPerTurn} → ${energyPerTurn + 1} per turn.`,
@@ -1644,14 +1657,7 @@ function showReward() {
           afterReward();
         }
       }
-    : {
-        title: 'New / Upgrade Ability',
-        desc:  'Learn Poison, Rage, or Thorns — or level up one you already have.',
-        fn() {
-          hide('reward-panel');
-          showAbilityPick();
-        }
-      };
+    : abilityReward;
 
   const rewards = [
     {
@@ -1689,7 +1695,7 @@ function showDiePick() {
   show('die-pick-panel');
   const opts = document.getElementById('die-pick-options');
   opts.innerHTML = '';
-  DICE.forEach(die => {
+  DICE.filter(die => unlockedDiceTiers.has(die)).forEach(die => {
     const u   = dieUpgrades[die];
     const btn = document.createElement('button');
     btn.className = 'die-pick-btn';
@@ -1876,6 +1882,7 @@ function hide(id) {
 // ─── Keyboard shortcuts ──────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (phase !== 'combat' || enemyTurnLocked) return;
+  if (e.key === 'Enter') { endTurn(); return; }
   const die = DIE_KEY[e.key];
   if (!die) return;
   // Only act if the die is actually assigned (in DICE list)
