@@ -645,6 +645,48 @@
   }
   #dev-panel .dev-apply:hover { background: #223322; }
 
+  /* Dice bag */
+  .bag-screen { padding: 8px 0 4px; }
+  .bag-title { font-family: var(--display); font-size: 1.1rem; letter-spacing: 0.15em; color: var(--accent); margin-bottom: 4px; }
+  .bag-sub   { font-size: 0.72rem; color: var(--muted); margin-bottom: 14px; }
+
+  .bag-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .bag-col-title { font-family: var(--display); font-size: 0.65rem; letter-spacing: 0.15em; color: var(--muted); margin-bottom: 8px; }
+
+  .bag-slot {
+    display: flex; align-items: center; gap: 8px;
+    background: #13131a; border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px 10px; margin-bottom: 6px;
+    cursor: default;
+  }
+  .bag-slot.swappable { cursor: pointer; border-color: #2a2a3a; }
+  .bag-slot.swappable:hover { border-color: var(--accent); background: #1a1a26; }
+  .bag-slot.selected-active { border-color: var(--accent); background: #1a1a26; }
+  .bag-slot.selected-bag    { border-color: var(--accent2); background: #16102a; }
+  .bag-slot.swap-target     { border-color: var(--heal); background: #101a10; }
+
+  .bs-die  { font-family: var(--display); font-size: 1rem; color: var(--accent); min-width: 38px; }
+  .bs-die.bag-die { color: var(--accent2); }
+  .bs-ab   { font-size: 0.72rem; color: var(--text); }
+  .bs-hint { font-size: 0.62rem; color: var(--muted); margin-top: 2px; }
+
+  .bag-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .bag-swap-btn {
+    font-family: var(--display); font-size: 0.8rem; letter-spacing: 0.1em;
+    padding: 10px 20px; border: 1px solid var(--accent2);
+    background: transparent; color: var(--accent2); border-radius: 3px; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .bag-swap-btn:hover:not(:disabled) { background: var(--accent2); color: var(--bg); }
+  .bag-swap-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .bag-done-btn {
+    font-family: var(--display); font-size: 0.8rem; letter-spacing: 0.1em;
+    padding: 10px 20px; border: 1px solid var(--accent);
+    background: transparent; color: var(--accent); border-radius: 3px; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .bag-done-btn:hover { background: var(--accent); color: var(--bg); }
+
   .phase-hidden { display: none !important; }
 </style>
 </head>
@@ -770,6 +812,28 @@
       <div class="dc-sub" id="dc-sub">You defeated the Troll King!</div>
       <div class="dc-rewards" id="dc-rewards"></div>
       <button class="big-btn" id="dc-continue-btn">Continue ›</button>
+    </div>
+  </div>
+
+  <!-- DICE BAG -->
+  <div class="panel phase-hidden" id="dice-bag-panel">
+    <div class="bag-screen">
+      <div class="bag-title">🎒 Dice Bag</div>
+      <div class="bag-sub">Swap dice between your active slots and the bag. Click a die on each side, then Swap.</div>
+      <div class="bag-layout">
+        <div>
+          <div class="bag-col-title">ATTUNEMENT SLOTS</div>
+          <div id="bag-active-list"></div>
+        </div>
+        <div>
+          <div class="bag-col-title">IN BAG</div>
+          <div id="bag-stored-list"></div>
+        </div>
+      </div>
+      <div class="bag-actions">
+        <button class="bag-swap-btn" id="bag-swap-btn" onclick="bagDoSwap()" disabled>⇄ Swap</button>
+        <button class="bag-done-btn" onclick="bagDone()">Continue ›</button>
+      </div>
     </div>
   </div>
 
@@ -1135,6 +1199,10 @@ let autoEndTimer = null;
 let assignments, phase, enemyTurnLocked;
 let waveNum, waveEnemies, enemies, selectedTarget;
 let dungeonNum, bossActionIndex;
+let diceBag;          // array of { die, ability, upgrade, abilityLevel }
+let bagSelActive;     // index into active dice (STARTING_DICE), or null
+let bagSelBag;        // index into diceBag, or null
+let bagAfterCallback; // fn to call when bag is done
 let unlockedDiceTiers; // set of die names available as rewards
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -1142,8 +1210,8 @@ function roll(die) { return Math.floor(Math.random() * DIE_SIDES[die]) + 1; }
 function dieName(die) { const u = dieUpgrades[die]; return u > 0 ? `${die}+${u}` : die; }
 function dieMax(die)  { return DIE_SIDES[die] + dieUpgrades[die]; }
 
-function abilityDisplayName(ability) {
-  const lvl = abilityLevels[ability];
+function abilityDisplayName(ability, overrideLvl) {
+  const lvl = overrideLvl !== undefined ? overrideLvl : abilityLevels[ability];
   if (!lvl) return ability;
   const numerals = ['','I','II','III','IV','V'];
   return ability + ' ' + (numerals[Math.min(lvl, 5)] || lvl);
@@ -1285,7 +1353,7 @@ function showDungeonComplete() {
 
   document.getElementById('dc-continue-btn').onclick = () => {
     hide('dungeon-complete-panel');
-    startNextDungeon();
+    showDiceBag(startNextDungeon);
   };
 }
 
@@ -1337,6 +1405,10 @@ function init() {
   selectedTarget = null;
   dungeonNum        = 1;
   bossActionIndex   = 0;
+  diceBag           = [];
+  bagSelActive      = null;
+  bagSelBag         = null;
+  bagAfterCallback  = null;
   unlockedDiceTiers = new Set(['d4','d6','d8']); // d10+ unlocked by clearing dungeons
 
   show('assign-panel');
@@ -1347,6 +1419,7 @@ function init() {
   hide('ability-pick-panel');
   hide('ability-die-pick-panel');
   hide('dungeon-complete-panel');
+  hide('dice-bag-panel');
   document.getElementById('enemies-container').style.display = 'none';
   document.getElementById('wave-bar').style.display = 'none';
 
@@ -2033,9 +2106,16 @@ function showAbilityDiePick(chosenAbility) {
     const dLabel = u > 0 ? `${die}+${u}` : die;
     btn.innerHTML = `<div class="dpb-name">${dLabel}</div><div class="dpb-level">replaces ${abilityDisplayName(curAbility)}</div>`;
     btn.onclick = () => {
-      assignments[die]          = chosenAbility;
+      // Send displaced die to bag before replacing
+      if (curAbility) {
+        // Upgrade stays on the slot; bag entry only carries ability
+        diceBag.push({ die, ability: curAbility,
+                       abilityLevel: abilityLevels[curAbility] || 0 });
+        addLog(`${die} ${abilityDisplayName(curAbility)} moved to Dice Bag.`, 'muted');
+      }
+      assignments[die]             = chosenAbility;
       abilityLevels[chosenAbility] = 1;
-      addLog(`Reward: ${dLabel} now uses ${chosenAbility} I (replaced ${abilityDisplayName(curAbility)}).`, 'crit');
+      addLog(`Reward: ${dLabel} now uses ${chosenAbility} I.`, 'crit');
       hide('ability-die-pick-panel');
       afterReward();
     };
@@ -2057,6 +2137,141 @@ function afterReward() {
   energy = 0;
   startWave(waveNum + 1);
   startPlayerTurn(true);
+}
+
+// ─── Dice Bag ─────────────────────────────────────────────────────────────────
+function showDiceBag(afterFn) {
+  bagAfterCallback = afterFn;
+  bagSelActive = null;
+  bagSelBag    = null;
+  phase = 'bag';
+  show('dice-bag-panel');
+  renderDiceBag();
+}
+
+function renderDiceBag() {
+  // Work out which die size is selected in the bag (for slot highlighting)
+  const selBagDie = (bagSelBag !== null && diceBag[bagSelBag]) ? diceBag[bagSelBag].die : null;
+
+  // ── Attunement slots (left column) ────────────────────────────────────────
+  const activeEl = document.getElementById('bag-active-list');
+  activeEl.innerHTML = '';
+  STARTING_DICE.forEach((die, idx) => {
+    const ab    = assignments[die];
+    const upg   = dieUpgrades[die] || 0;
+    const slotLabel = upg > 0 ? `${die}+${upg}` : die; // upgrade is on the slot
+    // A slot is a valid swap target only if the selected bag die matches its size
+    const isTarget = (selBagDie === die);
+    const isSelected = (bagSelActive === idx);
+
+    const slot = document.createElement('div');
+    slot.className = 'bag-slot swappable'
+      + (isSelected  ? ' selected-active' : '')
+      + (isTarget && !isSelected ? ' swap-target' : '');
+    slot.innerHTML = `
+      <div>
+        <div class="bs-die">${slotLabel}</div>
+        <div class="bs-hint" style="font-size:0.6rem;">slot</div>
+      </div>
+      <div>
+        <div class="bs-ab">${abilityDisplayName(ab || '—')}</div>
+        <div class="bs-hint">${ab ? 'attuned' : 'empty'}</div>
+      </div>`;
+    slot.onclick = () => {
+      // Clicking a slot only makes sense when a bag die of matching size is selected
+      if (selBagDie !== null && selBagDie !== die) return; // wrong size — ignore
+      bagSelActive = (bagSelActive === idx) ? null : idx;
+      updateBagSwapBtn();
+      renderDiceBag();
+    };
+    activeEl.appendChild(slot);
+  });
+
+  // ── Bag dice (right column) ────────────────────────────────────────────────
+  const bagEl = document.getElementById('bag-stored-list');
+  bagEl.innerHTML = '';
+  if (!diceBag.length) {
+    bagEl.innerHTML = '<div style="color:var(--muted);font-size:0.72rem;padding:8px 0;">Bag is empty.</div>';
+  } else {
+    diceBag.forEach((entry, idx) => {
+      // Bag dice carry NO upgrade — upgrades live on the slot
+      const abDisplay = abilityDisplayName(entry.ability, entry.abilityLevel);
+      // Show which slot this die can go into
+      const slotUpg = dieUpgrades[entry.die] || 0;
+      const slotHint = slotUpg > 0 ? `fits ${entry.die}+${slotUpg} slot` : `fits ${entry.die} slot`;
+
+      const slot = document.createElement('div');
+      slot.className = 'bag-slot swappable' + (bagSelBag === idx ? ' selected-bag' : '');
+      slot.innerHTML = `
+        <div>
+          <div class="bs-die bag-die">${entry.die}</div>
+          <div class="bs-hint" style="font-size:0.6rem;">bag</div>
+        </div>
+        <div>
+          <div class="bs-ab">${abDisplay}</div>
+          <div class="bs-hint">${slotHint}</div>
+        </div>`;
+      slot.onclick = () => {
+        bagSelBag = (bagSelBag === idx) ? null : idx;
+        // Clear active selection if it was a different die size
+        if (bagSelBag !== null && bagSelActive !== null) {
+          const activeDie = STARTING_DICE[bagSelActive];
+          if (activeDie !== entry.die) bagSelActive = null;
+        }
+        updateBagSwapBtn();
+        renderDiceBag();
+      };
+      bagEl.appendChild(slot);
+    });
+  }
+
+  updateBagSwapBtn();
+}
+
+function updateBagSwapBtn() {
+  let canSwap = bagSelActive !== null && bagSelBag !== null;
+  if (canSwap) {
+    const activeDie = STARTING_DICE[bagSelActive];
+    const bagDie    = diceBag[bagSelBag]?.die;
+    canSwap = (activeDie === bagDie); // sizes must match
+  }
+  document.getElementById('bag-swap-btn').disabled = !canSwap;
+}
+
+function bagDoSwap() {
+  if (bagSelActive === null || bagSelBag === null) return;
+  const die        = STARTING_DICE[bagSelActive];
+  const bagEntry   = diceBag[bagSelBag];
+  if (die !== bagEntry.die) return; // size mismatch guard
+
+  const oldAbility = assignments[die];
+  const oldAbLevel = oldAbility ? (abilityLevels[oldAbility] || 0) : 0;
+
+  // Push current ability into bag (NO upgrade — slot keeps it)
+  if (oldAbility) {
+    diceBag.push({ die, ability: oldAbility, abilityLevel: oldAbLevel });
+  }
+
+  // Install bag ability into slot (slot upgrade unchanged)
+  assignments[die] = bagEntry.ability;
+  if (bagEntry.abilityLevel > 0) abilityLevels[bagEntry.ability] = bagEntry.abilityLevel;
+
+  // Remove from bag
+  diceBag.splice(bagSelBag, 1);
+
+  const slotUpg = dieUpgrades[die] || 0;
+  const slotLabel = slotUpg > 0 ? `${die}+${slotUpg}` : die;
+  addLog(`Attuned: ${slotLabel} ${abilityDisplayName(bagEntry.ability)} is now active.`, 'muted');
+
+  bagSelActive = null;
+  bagSelBag    = null;
+  renderDiceBag();
+}
+
+function bagDone() {
+  hide('dice-bag-panel');
+  phase = 'combat';
+  if (bagAfterCallback) { bagAfterCallback(); bagAfterCallback = null; }
 }
 
 // ─── Game Over ────────────────────────────────────────────────────────────────
