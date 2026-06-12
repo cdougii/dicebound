@@ -624,10 +624,16 @@
     color: var(--text); font-family: var(--mono); font-size: 0.72rem;
     padding: 3px 5px; border-radius: 2px;
   }
-  #dev-panel .dev-section {
-    border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px;
-    color: var(--accent); font-size: 0.65rem; letter-spacing: 0.1em; margin-bottom: 4px;
+  #dev-panel .dev-sub {
+    border-top: 1px solid var(--border); margin-top: 6px; padding-top: 6px;
   }
+  #dev-panel .dev-sub > summary {
+    color: var(--accent); font-size: 0.65rem; letter-spacing: 0.1em;
+    cursor: pointer; user-select: none; padding: 2px 0;
+  }
+  #dev-panel .dev-sub > summary::-webkit-details-marker { display: none; }
+  #dev-panel .dev-sub[open] > summary::before { content: '▾ '; }
+  #dev-panel .dev-sub:not([open]) > summary::before { content: '▸ '; }
   #dev-panel .dev-grid {
     display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; margin-top: 4px;
   }
@@ -784,49 +790,57 @@
 
 </div>
 
+<div style="text-align:center; margin-top:16px;">
+  <button class="big-btn" id="new-game-btn" style="font-size:0.8rem; padding:10px 28px; border-color:var(--muted); color:var(--muted);">↺ New Game</button>
+</div>
+
 <!-- DEV CONTROLS -->
 <details id="dev-panel">
   <summary>⚙ DEV</summary>
 
-  <div class="dev-section">NAVIGATION</div>
-  <div class="dev-row">
-    <label>Dungeon</label>
-    <input type="number" id="dev-dungeon" value="1" min="1" max="10">
-    <label>Wave</label>
-    <input type="number" id="dev-wave" value="1" min="1" max="6">
-    <button onclick="devJump()">Jump</button>
-  </div>
-  <div style="color:var(--muted);font-size:0.65rem;margin-top:4px;">Wave 6 = Boss Fight</div>
+  <details class="dev-sub">
+    <summary>Navigation</summary>
+    <div class="dev-row">
+      <label>Dungeon</label>
+      <input type="number" id="dev-dungeon" value="1" min="1" max="10">
+      <label>Wave</label>
+      <input type="number" id="dev-wave" value="1" min="1" max="6">
+      <button onclick="devJump()">Jump</button>
+    </div>
+    <div style="color:var(--muted);font-size:0.65rem;margin-top:4px;">Wave 6 = Boss Fight</div>
+  </details>
 
-  <div class="dev-section">PLAYER STATS</div>
-  <div class="dev-grid">
-    <label>Max HP</label>
-    <input type="number" id="dev-maxhp" value="30" min="1" max="999">
-    <label>Current HP</label>
-    <input type="number" id="dev-hp" value="30" min="1" max="999">
-    <label>Shield</label>
-    <input type="number" id="dev-shield" value="0" min="0" max="999">
-    <label>Energy/Turn</label>
-    <input type="number" id="dev-ept" value="3" min="1" max="20">
-  </div>
+  <details class="dev-sub">
+    <summary>Player Stats</summary>
+    <div class="dev-grid">
+      <label>Max HP</label>
+      <input type="number" id="dev-maxhp" value="30" min="1" max="999">
+      <label>Current HP</label>
+      <input type="number" id="dev-hp" value="30" min="1" max="999">
+      <label>Shield</label>
+      <input type="number" id="dev-shield" value="0" min="0" max="999">
+      <label>Energy/Turn</label>
+      <input type="number" id="dev-ept" value="3" min="1" max="20">
+    </div>
+  </details>
 
-  <div class="dev-section">DICE UPGRADES</div>
-  <div class="dev-grid" id="dev-dice-grid">
-    <!-- populated by devRefresh() -->
-  </div>
+  <details class="dev-sub">
+    <summary>Dice Upgrades</summary>
+    <div class="dev-grid" id="dev-dice-grid"></div>
+  </details>
 
-  <div class="dev-section">DIE ASSIGNMENTS</div>
-  <div id="dev-assign-grid">
-    <!-- populated by devRefresh() -->
-  </div>
+  <details class="dev-sub">
+    <summary>Die Assignments</summary>
+    <div id="dev-assign-grid"></div>
+  </details>
 
-  <div class="dev-section">SPECIAL ABILITY LEVELS</div>
-  <div class="dev-grid" id="dev-ability-grid">
-    <!-- populated by devRefresh() -->
-  </div>
+  <details class="dev-sub">
+    <summary>Ability Levels</summary>
+    <div class="dev-grid" id="dev-ability-grid"></div>
+  </details>
 
   <button class="dev-apply" onclick="devApplyStats()">✓ Apply Stats</button>
-  <button style="margin-top:4px;width:100%;font-size:0.68rem;" onclick="devRefresh()">↺ Refresh from game</button>
+  <button style="margin-top:4px;width:100%;font-size:0.68rem;" onclick="devRefresh()">↺ Refresh</button>
 </details>
 
 <script>
@@ -891,7 +905,7 @@ const ENEMY_DB = [
   {
     name:       'Goblin Archer',
     biome:      'Forest',
-    powerLevel: 3,
+    powerLevel: 2,
     minDungeon: 2,
     minWave:    1,
     hp:         10,
@@ -902,7 +916,7 @@ const ENEMY_DB = [
   {
     name:       'Stirge',
     biome:      'Forest',
-    powerLevel: 3,
+    powerLevel: 2,
     minDungeon: 3,
     minWave:    1,
     hp:         5,
@@ -1066,29 +1080,35 @@ function getWaveEnemies(waveN, biomeName, dungeonN) {
 
   if (!pool.length) return [ENEMY_DB.find(e => e.biome === biomeName)?.name || 'Rat'];
 
-  pool.sort((a, b) => a.power - b.power);
-  const cheapestPower = pool[0].power;
   const result = [];
   let spent = 0;
 
   while (spent < budget) {
     const remaining = budget - spent;
-    const exact     = pool.filter(e => e.power <= remaining);
-    const withOver  = pool.filter(e => e.power <= remaining + 1);
 
-    let candidates;
-    if (exact.length) {
-      candidates = exact;
-    } else if (withOver.length && result.length === 0) {
-      candidates = [withOver[0]];
-    } else {
+    // Enemies that fit within the remaining budget
+    const fits = pool.filter(e => e.power <= remaining);
+
+    // If nothing fits and wave is still empty, take the cheapest available
+    if (!fits.length) {
+      if (!result.length) {
+        const cheapest = pool.slice().sort((a,b) => a.power - b.power)[0];
+        result.push(cheapest.name);
+      }
       break;
     }
 
-    // Prefer cheaper enemies to keep groups multi-enemy
-    const cheaper = candidates.filter(e => e.power < remaining);
-    const pick    = (cheaper.length > 0 && remaining > cheapestPower) ? cheaper : candidates;
-    const chosen  = pick[Math.floor(Math.random() * pick.length)];
+    // Weighted random: power^1.5 so stronger enemies appear meaningfully
+    // often without completely crowding out cheaper filler enemies.
+    const weights = fits.map(e => Math.pow(e.power, 1.5));
+    const total   = weights.reduce((s, w) => s + w, 0);
+    let   rand    = Math.random() * total;
+    let   chosen  = fits[fits.length - 1];
+    for (let i = 0; i < fits.length; i++) {
+      rand -= weights[i];
+      if (rand <= 0) { chosen = fits[i]; break; }
+    }
+
     result.push(chosen.name);
     spent += chosen.power;
   }
@@ -2143,6 +2163,33 @@ document.addEventListener('keydown', e => {
   if (!DICE.includes(die)) return;
   if (!assignments[die]) return;
   playerAction(die);
+});
+
+// ─── New Game ────────────────────────────────────────────────────────────────
+document.getElementById('new-game-btn').addEventListener('click', () => {
+  // Show inline confirmation instead of confirm() (blocked in iframes)
+  const btn = document.getElementById('new-game-btn');
+  if (btn.dataset.confirming === 'true') {
+    btn.dataset.confirming = 'false';
+    btn.textContent = '↺ New Game';
+    btn.style.borderColor = 'var(--muted)';
+    btn.style.color = 'var(--muted)';
+    init();
+    return;
+  }
+  btn.dataset.confirming = 'true';
+  btn.textContent = '✓ Confirm New Game';
+  btn.style.borderColor = 'var(--danger)';
+  btn.style.color = 'var(--danger)';
+  // Auto-cancel after 3 seconds
+  setTimeout(() => {
+    if (btn.dataset.confirming === 'true') {
+      btn.dataset.confirming = 'false';
+      btn.textContent = '↺ New Game';
+      btn.style.borderColor = 'var(--muted)';
+      btn.style.color = 'var(--muted)';
+    }
+  }, 3000);
 });
 
 // ─── Dev tools ───────────────────────────────────────────────────────────────
